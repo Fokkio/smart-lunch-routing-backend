@@ -1,0 +1,6 @@
+INSERT INTO shop_settings(setting_id,shop_name,latitude,longitude) VALUES(1,'Smart Lunch Shop',16.2463100,103.2528600) ON DUPLICATE KEY UPDATE shop_name=VALUES(shop_name);
+INSERT INTO customers(name,phone,address,latitude,longitude) VALUES ('Anan S.','0800000001','Khon Kaen',16.2469000,103.2531000),('Bua K.','0800000002','Khon Kaen',16.2457000,103.2542000),('Chai P.','0800000003','Khon Kaen',16.2475000,103.2518000);
+INSERT INTO riders(rider_name,phone,is_available) VALUES ('Rider One','0810000001',TRUE),('Rider Two','0810000002',TRUE),('Rider Three','0810000003',TRUE);
+INSERT INTO orders(customer_id,order_date,box_count,status) SELECT customer_id,CURDATE(),1,'PENDING' FROM customers ORDER BY customer_id LIMIT 1;
+INSERT INTO orders(customer_id,order_date,box_count,status) SELECT customer_id,CURDATE(),2,'PENDING' FROM customers ORDER BY customer_id LIMIT 1 OFFSET 1;
+INSERT INTO orders(customer_id,order_date,box_count,status) SELECT customer_id,CURDATE(),3,'PENDING' FROM customers ORDER BY customer_id LIMIT 1 OFFSET 2;

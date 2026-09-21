@@ -1,0 +1,54 @@
+import { validateCoordinate, type Coordinate } from './coordinate';
+import type { DistanceCalculator, DistanceResult } from './distance.types';
+
+/**
+ * Haversine distance calculator (pure Domain — no HTTP, no network).
+ *
+ * Returns the straight-line great-circle distance between two points.
+ * It does NOT return road-driving distance, driving duration, or geometry.
+ *
+ * Use it for: deterministic unit testing, fallback calculation, sanity
+ * checking, lightweight geographic comparison, possible future
+ * pre-clustering. Do NOT label its output "actual route distance" —
+ * real road routing (OSRM) will replace it where roads matter.
+ */
+export class HaversineDistanceCalculator implements DistanceCalculator {
+  readonly source = 'HAVERSINE' as const;
+
+  async calculate(from: Coordinate, to: Coordinate): Promise<DistanceResult> {
+    validateCoordinate(from);
+    validateCoordinate(to);
+    return { distanceKm: haversineKmBetween(from, to), source: this.source };
+  }
+}
+
+/**
+ * Documented Earth mean radius (IUGG mean radius).
+ * A named constant — not an unexplained magic number.
+ */
+export const EARTH_MEAN_RADIUS_KM = 6371.0088;
+
+function toRadians(degrees: number): number {
+  return (degrees * Math.PI) / 180;
+}
+
+/**
+ * Core Haversine formula (synchronous, full internal precision —
+ * no rounding here; formatting belongs to consumers).
+ *
+ *   dLat = lat2 - lat1;  dLon = lon2 - lon1
+ *   a = sin²(dLat/2) + cos(lat1)·cos(lat2)·sin²(dLon/2)
+ *   c = 2·atan2(√a, √(1−a))
+ *   distance = R·c
+ */
+export function haversineKmBetween(from: Coordinate, to: Coordinate): number {
+  validateCoordinate(from);
+  validateCoordinate(to);
+  const dLat = toRadians(to.latitude - from.latitude);
+  const dLon = toRadians(to.longitude - from.longitude);
+  const lat1 = toRadians(from.latitude);
+  const lat2 = toRadians(to.latitude);
+  const a =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return EARTH_MEAN_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}

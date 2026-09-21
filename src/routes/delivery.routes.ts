@@ -1,0 +1,1 @@
+import { Router } from 'express'; import { DeliveryController } from '../controllers/delivery.controller'; export const deliveryRoutes=Router(); deliveryRoutes.post('/plan',DeliveryController.plan); deliveryRoutes.post('/plan-from-database',DeliveryController.planFromDatabase);

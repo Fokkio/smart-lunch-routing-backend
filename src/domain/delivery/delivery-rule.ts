@@ -1,0 +1,3 @@
+/** Fallback values only. Runtime routing and costing reads shop_settings. */
+export const DEMO_FALLBACK_SETTINGS = { deliveryStartTime: '11:30:00', deliveryDeadline: '12:30:00', maxOrdersPerRider: 3, riderSpeedKmh: 30, boxSalePrice: 65, boxFoodCost: 40, riderBaseCost: 15, riderCostPerKm: 4 } as const;
+export function estimateTravelMinutes(distanceKm: number, speedKmh = DEMO_FALLBACK_SETTINGS.riderSpeedKmh): number { return Math.ceil((distanceKm / speedKmh) * 60); }

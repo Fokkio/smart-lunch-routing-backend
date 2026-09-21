@@ -1,0 +1,33 @@
+{
+  "name": "smart-lunch-routing-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Express + TypeScript + MySQL (Aiven) backend for smart-lunch-routing. First pass: clean MVC + Service + Domain skeleton.",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "tsx scripts/run-sql.ts database/migrations/001_initial_schema.sql",
+    "db:migrate:routing": "tsx scripts/run-sql.ts database/migrations/002_routing_metadata.sql",
+    "db:seed": "tsx scripts/run-sql.ts database/seeds/001_seed.sql",
+    "verify:live-osrm": "tsx scripts/live-verify-osrm.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "mysql2": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.1",
+    "typescript": "~5.6.2",
+    "vitest": "^4.0.8"
+  }
+}

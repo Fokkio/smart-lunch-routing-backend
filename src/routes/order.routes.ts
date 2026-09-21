@@ -1,0 +1,1 @@
+import { Router } from 'express'; import { OrderController } from '../controllers/order.controller'; export const orderRoutes=Router(); orderRoutes.get('/',OrderController.list); orderRoutes.get('/:id',OrderController.get); orderRoutes.post('/',OrderController.create); orderRoutes.put('/:id',OrderController.update); orderRoutes.delete('/:id',OrderController.remove);

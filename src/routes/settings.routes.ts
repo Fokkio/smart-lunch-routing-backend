@@ -1,0 +1,2 @@
+import { Router } from 'express'; import { ShopSettingsModel } from '../models/shop-settings.model';
+export const settingsRoutes=Router(); settingsRoutes.get('/',async(_req,res,next)=>{try{res.json(await ShopSettingsModel.get())}catch(e){next(e)}}); settingsRoutes.put('/',async(req,res,next)=>{try{res.json(await ShopSettingsModel.update(req.body))}catch(e){next(e)}});
