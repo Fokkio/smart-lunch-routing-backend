@@ -3,6 +3,8 @@
 Express + TypeScript + MySQL (`mysql2/promise`) skeleton using
 **MVC + Service Layer + Domain Layer**.
 
+สมาชิกทีมที่เพิ่งเริ่มใช้ Git ดูขั้นตอนได้จาก [คู่มือ Git และ GitHub ภาษาไทย](GIT_GUIDE_TH.md)
+
 ## Architecture
 
 ```
