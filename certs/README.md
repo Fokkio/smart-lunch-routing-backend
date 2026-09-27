@@ -1,15 +1,25 @@
 # Backend certificates (not committed)
 
-Download the **Aiven MySQL CA certificate** from your Aiven service
-overview page and save it here as:
+TiDB Cloud Starter requires TLS for public endpoint connections. Download the
+TiDB Cloud CA certificate and save it here as:
 
 ```text
-backend/certs/ca.pem
+backend/certs/isrgrootx1.pem
 ```
+
+Runtime configuration in `backend/.env` should point to this file:
+
+```env
+DB_SSL=true
+DB_SSL_CA_PATH=./certs/isrgrootx1.pem
+```
+
+For Vercel or another deployment platform, use `DB_SSL_CA` with the PEM text
+instead of committing a certificate file.
 
 Notes:
 
-- `backend/.env` points at it via `DB_SSL_CA_PATH=./certs/ca.pem`
-  (run backend commands from the `backend/` directory).
-- Never commit `ca.pem` — it is ignored by Git (only this README is tracked).
-- Never paste certificate contents into chat, docs, or source files.
+- Run backend commands from the `backend/` directory so the relative path resolves.
+- Never commit `.pem` files — certificates in this directory are ignored by Git.
+- Never paste certificate contents into chat, docs, logs, or source files.
+- `ca.pem` may exist as the legacy Aiven CA during migration history; do not use it for TiDB connections.
