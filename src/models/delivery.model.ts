@@ -1,7 +1,7 @@
 // TODO:
 // Delivery persistence schema is still open (no deliveries table exists in
 // the frontend demo — the plan lives in localStorage). SQL below assumes a
-// minimal `deliveries` table; confirm/adjust against Aiven before use.
+// minimal `deliveries` table; keep it until delivery_jobs-based rider flows are implemented.
 //
 // What is needed:
 // - Confirm deliveries/assignments table design (columns for rider,
@@ -58,3 +58,4 @@ export class DeliveryModel {
     return noDb('findRiderJob');
   }
 }
+

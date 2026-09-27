@@ -1,6 +1,6 @@
 # Backend — Smart Lunch Routing
 
-Express + TypeScript + MySQL (`mysql2/promise`) API using
+Express + TypeScript + TiDB Cloud MySQL-compatible API using
 **MVC + Service Layer + Domain Layer**.
 
 สมาชิกทีมที่เพิ่งเริ่มใช้ Git ดูขั้นตอนได้จาก [คู่มือ Git และ GitHub ภาษาไทย](GIT_GUIDE_TH.md)
@@ -20,21 +20,21 @@ Domain        business rules & algorithms (`src/domain/`)
   ↓           (only when business rules are needed; plain CRUD skips Domain)
 Models        database access / persistence (`src/models/`)
   ↓
-MySQL         connection config (`src/database/`)
+MySQL pool    connection config (`src/database/`)
   ↓
-Aiven MySQL   credentials via environment variables, never in source
+TiDB Cloud    credentials via environment variables, never in source
 ```
 
 - **MVC** organizes HTTP/data flow (routes → controllers → models).
 - **Service layer** holds application workflows (controller → service → model).
 - **Domain layer** holds business rules and routing algorithms
   (`domain/delivery/`, `domain/routing/`).
-- **MySQL** is hosted on Aiven; all connection values come from env vars.
+- **TiDB Cloud** is the runtime MySQL-compatible database; all connection values come from environment variables.
 
 Example CRUD flow (no Domain needed):
 
 ```
-POST /api/customers → CustomerController → CustomerService → CustomerModel → MySQL
+POST /api/customers → CustomerController → CustomerService → CustomerModel → TiDB
 ```
 
 Example planning flow (Domain involved):
@@ -42,7 +42,7 @@ Example planning flow (Domain involved):
 ```
 POST /api/route-plans/generate → RoutePlanController → RoutePlanningService
   → OsrmTableProvider (or Haversine fallback) → cluster → sequence
-  → deadline gate → cost → RoutePlanModel → MySQL
+  → deadline gate → cost → RoutePlanModel → TiDB
 ```
 
 Legacy demo flow (kept, payload-based, no DB):
@@ -135,6 +135,26 @@ Without DB credentials, DB-backed routes answer 503; bad `planDate` answers
 400; infeasible/no-order generations answer 422. Docs: `docs/distance-domain.md`,
 `docs/routing-pipeline.md`.
 
+## Configuration
+
+Copy `.env.example` to `.env`, then fill in local values. Do not commit `.env`.
+
+Required TiDB Cloud runtime variables:
+
+```env
+DB_HOST=
+DB_PORT=4000
+DB_USER=
+DB_PASSWORD=
+DB_NAME=smart_lunch_route
+DB_SSL=true
+DB_SSL_CA_PATH=./certs/isrgrootx1.pem
+```
+
+Use the application database user for runtime. Do not use TiDB root/admin as
+`DB_USER` in `.env`. The CA file should be the TiDB Cloud CA certificate; see
+[certs/README.md](certs/README.md).
+
 ## Database setup
 
 Copy `.env.example` to `.env`, fill in the database values, then apply the
@@ -145,7 +165,7 @@ endpoint cannot delete real orders.
 npm.cmd run db:migrate
 npm.cmd run db:migrate:routing
 npm.cmd run db:migrate:simulation
-npm.cmd run db:seed
+npm.cmd run db:init-settings
 ```
 
 `CORS_ORIGIN` accepts a comma-separated allowlist. If the database provider
@@ -196,6 +216,7 @@ npx.cmd vercel --prod
 
 ## Open TODOs
 
-Aiven credentials + live verification, live OSRM verification (unit tests
-mock HTTP), richer alternative-plan strategies, rider job page. See code
+Legacy migration notes, live OSRM verification (unit tests mock HTTP), richer alternative-plan strategies, rider job page. See code
 `TODO` comments and `docs/routing-pipeline.md`.
+
+
