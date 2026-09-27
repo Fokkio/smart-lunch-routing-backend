@@ -2,6 +2,9 @@
   "name": "smart-lunch-routing-backend",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "description": "Express + TypeScript + MySQL (Aiven) backend for smart-lunch-routing. First pass: clean MVC + Service + Domain skeleton.",
   "main": "dist/server.js",
   "scripts": {
@@ -13,6 +16,7 @@
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/run-sql.ts database/migrations/001_initial_schema.sql",
     "db:migrate:routing": "tsx scripts/run-sql.ts database/migrations/002_routing_metadata.sql",
+    "db:migrate:simulation": "tsx scripts/run-sql.ts database/migrations/003_simulated_orders.sql",
     "db:seed": "tsx scripts/run-sql.ts database/seeds/001_seed.sql",
     "verify:live-osrm": "tsx scripts/live-verify-osrm.ts"
   },

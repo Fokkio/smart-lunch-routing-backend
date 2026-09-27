@@ -16,13 +16,17 @@ export function createApp(): express.Express {
 
   // CORS
   app.use(
-    cors(
-      config.corsOrigin
-        ? {
-            origin: config.corsOrigin,
-          }
-        : undefined
-    )
+    cors({
+      origin(origin, callback) {
+        if (!origin || config.corsOrigins.length === 0 || config.corsOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(Object.assign(new Error('Origin is not allowed by CORS'), { statusCode: 403 }));
+      },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    })
   );
 
   // Parse JSON body
@@ -50,6 +54,10 @@ export function createApp(): express.Express {
   app.use("/api/deliveries", deliveryRoutes);
   app.use("/api/route-plans", routePlanRoutes);
   app.use("/api/settings", settingsRoutes);
+
+  app.use((_req, res) => {
+    res.status(404).json({ message: 'Route not found' });
+  });
 
   // Error handler ต้องอยู่ท้ายสุด
   app.use(errorHandler);

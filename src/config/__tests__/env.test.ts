@@ -4,12 +4,15 @@ import { config, databaseConfigError } from '../env';
 const DB_VARS = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'];
 let saved: Record<string, string | undefined>;
 let savedSsl: boolean;
+let savedCa: string | undefined;
 let savedCaPath: string | undefined;
 
 beforeEach(() => {
   saved = {};
   savedSsl = config.db.ssl;
+  savedCa = config.db.ca;
   savedCaPath = config.db.caPath;
+  config.db.ca = undefined;
   for (const key of DB_VARS) {
     saved[key] = process.env[key];
     delete process.env[key];
@@ -22,6 +25,7 @@ afterEach(() => {
     else process.env[key] = saved[key];
   }
   config.db.ssl = savedSsl;
+  config.db.ca = savedCa;
   config.db.caPath = savedCaPath;
 });
 
@@ -43,7 +47,7 @@ describe('databaseConfigError', () => {
     config.db.ssl = true;
     config.db.caPath = './certs/missing-ca.pem';
     const message = databaseConfigError({ fileExists: () => false });
-    expect(message).toContain('Aiven SSL certificate not found:');
+    expect(message).toContain('SSL certificate not found:');
     // Path only — never certificate contents (the fake reader proves it).
     expect(message).not.toContain('BEGIN CERTIFICATE');
   });
@@ -52,6 +56,14 @@ describe('databaseConfigError', () => {
     config.db.ssl = true;
     config.db.caPath = './certs/ca.pem';
     const message = databaseConfigError({ fileExists: () => true });
+    expect(message).not.toContain('certificate');
+  });
+
+  it('prefers an inline CA over a local certificate path on Vercel', () => {
+    config.db.ssl = true;
+    config.db.ca = 'inline certificate';
+    config.db.caPath = './certs/not-deployed.pem';
+    const message = databaseConfigError({ fileExists: () => false });
     expect(message).not.toContain('certificate');
   });
 });

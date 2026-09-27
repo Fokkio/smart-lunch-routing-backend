@@ -13,7 +13,12 @@ export function getPool(): mysql.Pool {
   let ssl: mysql.SslOptions | undefined;
 
   if (config.db.ssl) {
-    if (config.db.caPath) {
+    if (config.db.ca) {
+      ssl = {
+        ca: config.db.ca,
+        rejectUnauthorized: true,
+      };
+    } else if (config.db.caPath) {
       ssl = {
         ca: fs.readFileSync(config.db.caPath, 'utf8'),
         rejectUnauthorized: true,
@@ -33,7 +38,7 @@ export function getPool(): mysql.Pool {
     database: config.db.database!,
     ssl,
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: config.db.connectionLimit,
     queueLimit: 0,
     decimalNumbers: true,
   });
