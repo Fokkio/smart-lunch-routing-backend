@@ -28,18 +28,22 @@ export function databaseConfigError(
   const fileExists = dependencies.fileExists ?? fs.existsSync;
   const lines: string[] = [];
   const missing = REQUIRED_DB_VARS.filter((key) => !value(key));
+
   if (missing.length) {
     lines.push('Missing database configuration:');
-    for (const key of missing) lines.push(`- ${key}`);
-  }
-  if (config.db.ssl) {
-    if (!config.db.caPath) {
-      lines.push('DB_SSL=true requires DB_SSL_CA_PATH to point to the Aiven CA certificate.');
-    } else if (!fileExists(config.db.caPath)) {
-      lines.push('Aiven SSL certificate not found:');
-      lines.push(config.db.caPath);
+    for (const key of missing) {
+      lines.push(`- ${key}`);
     }
   }
+
+  if (config.db.ssl && config.db.caPath && !fileExists(config.db.caPath)) {
+    lines.push('SSL certificate not found:');
+    lines.push(config.db.caPath);
+  }
+
   return lines.length ? lines.join('\n') : null;
 }
-export function hasDbConfig(): boolean { return databaseConfigError() === null; }
+
+export function hasDbConfig(): boolean {
+  return databaseConfigError() === null;
+}
