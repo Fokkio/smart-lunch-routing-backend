@@ -10,7 +10,7 @@ export const config = { port: Number.isFinite(port) ? port : 3000, corsOrigin: v
   // a development convenience, NOT production infrastructure.
   baseUrl: value('OSRM_BASE_URL') ?? 'https://router.project-osrm.org',
   timeoutMs: Number.isFinite(osrmTimeoutMs) && osrmTimeoutMs > 0 ? osrmTimeoutMs : 8000,
-}, db: { host: value('DB_HOST'), port: Number.isFinite(dbPort) ? dbPort : 3306, user: value('DB_USER'), password: value('DB_PASSWORD'), database: value('DB_NAME'), ssl: value('DB_SSL')?.toLowerCase() === 'true', caPath: value('DB_SSL_CA_PATH') } };
+}, db: { host: value('DB_HOST'), port: Number.isFinite(dbPort) ? dbPort : 3306, user: value('DB_USER'), password: value('DB_PASSWORD'), database: value('DB_NAME'), ssl: value('DB_SSL')?.toLowerCase() === 'true', sslCaPath: value('DB_SSL_CA_PATH') } };
 
 const REQUIRED_DB_VARS = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'] as const;
 
@@ -32,13 +32,9 @@ export function databaseConfigError(
     lines.push('Missing database configuration:');
     for (const key of missing) lines.push(`- ${key}`);
   }
-  if (config.db.ssl) {
-    if (!config.db.caPath) {
-      lines.push('DB_SSL=true requires DB_SSL_CA_PATH to point to the Aiven CA certificate.');
-    } else if (!fileExists(config.db.caPath)) {
-      lines.push('Aiven SSL certificate not found:');
-      lines.push(config.db.caPath);
-    }
+  if (config.db.sslCaPath && !fileExists(config.db.sslCaPath)) {
+    lines.push('Database SSL CA certificate file not found:');
+    lines.push(config.db.sslCaPath);
   }
   return lines.length ? lines.join('\n') : null;
 }
