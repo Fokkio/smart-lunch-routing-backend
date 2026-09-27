@@ -10,7 +10,8 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   const statusCode = (err as { statusCode?: unknown }).statusCode;
   const notConfigured =
     message.includes('Database not configured') ||
-    message.includes('Database configuration is incomplete');
+    message.includes('Database configuration is incomplete') ||
+    message.includes('Missing database configuration');
   // 503 makes "DB env missing" distinguishable from real 500 bugs.
   const status =
     typeof statusCode === 'number' ? statusCode : notConfigured ? 503 : 500;

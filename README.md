@@ -1,6 +1,6 @@
-# Backend — Smart Lunch Routing (first pass)
+# Backend — Smart Lunch Routing
 
-Express + TypeScript + MySQL (`mysql2/promise`) skeleton using
+Express + TypeScript + MySQL (`mysql2/promise`) API using
 **MVC + Service Layer + Domain Layer**.
 
 สมาชิกทีมที่เพิ่งเริ่มใช้ Git ดูขั้นตอนได้จาก [คู่มือ Git และ GitHub ภาษาไทย](GIT_GUIDE_TH.md)
@@ -53,11 +53,12 @@ POST /api/deliveries/plan → DeliveryController → DeliveryService → RoutePl
 
 ## Structure
 
-`backend/src/` mirrors the requested `src/` layout, placed under `backend/`
-so it does not collide with the existing Angular `src/` app:
+The backend follows the controller/data-access separation taught in the
+NodeJS Web API (TS) vault, with service and domain layers retained for
+non-trivial business rules:
 
 ```
-backend/src/
+src/
 ├── controllers/   customer/order/rider/delivery.controller.ts
 ├── models/        customer/order/rider/delivery.model.ts
 ├── routes/        customer/order/rider/delivery.routes.ts
@@ -87,28 +88,28 @@ npm.cmd install
 npm.cmd start
 ```
 
-Backend (first pass — works without a database; DB routes return 503 until env is set):
+Backend (the health endpoint works without a database; DB routes return 503 until env is set):
 
 ```powershell
-cd backend
-npm install
+cd BackEnd\smart-lunch-routing-backend
+npm.cmd install
 copy .env.example .env
-npm run dev
+npm.cmd run dev
 ```
 
 Other backend commands:
 
 ```powershell
-npm test
-npm run typecheck
-npm run build
-npm run start
+npm.cmd test
+npm.cmd run typecheck
+npm.cmd run build
+npm.cmd run start
 ```
 
 Live OSRM verification (opt-in, real network, never part of `npm test`):
 
 ```powershell
-npm run verify:live-osrm
+npm.cmd run verify:live-osrm
 ```
 
 Health check: `GET http://localhost:3000/api/health`
@@ -116,7 +117,12 @@ Health check: `GET http://localhost:3000/api/health`
 ## Endpoints
 
 - `GET/POST /api/customers`, `GET/PUT/DELETE /api/customers/:id`
-- `GET/POST /api/orders` (`?status=&date=` supported), `GET/PUT/DELETE /api/orders/:id`
+- `GET /api/customers?search=สมชาย` searches any part of the stored name
+- `GET /api/customers/nearby?lat=&lng=&radiusKm=` (`radiusKm` defaults to 1)
+- `GET/POST /api/orders` (`?status=&date=&customerId=` supported), `GET/PUT/DELETE /api/orders/:id`
+- `GET /api/orders/nearby?lat=&lng=&radiusKm=` (`radiusKm` defaults to 2)
+- `POST /api/orders/simulate` with optional `{ "count": 25, "orderDate": "YYYY-MM-DD" }`
+- `DELETE /api/orders/simulated` deletes only rows created by the simulation endpoint
 - `GET/POST /api/riders` (`?available=true` supported), `GET/PUT /api/riders/:id`
 - `POST /api/route-plans/generate` `{planDate}` → 201 RoutePlan (new plan each call)
 - `POST /api/route-plans/recalculate` `{planDate}` → 201 deterministic alternative plan
@@ -128,6 +134,47 @@ Health check: `GET http://localhost:3000/api/health`
 Without DB credentials, DB-backed routes answer 503; bad `planDate` answers
 400; infeasible/no-order generations answer 422. Docs: `docs/distance-domain.md`,
 `docs/routing-pipeline.md`.
+
+## Database setup
+
+Copy `.env.example` to `.env`, fill in the database values, then apply the
+migrations in order. Migration 003 marks generated orders so the clear
+endpoint cannot delete real orders.
+
+```powershell
+npm.cmd run db:migrate
+npm.cmd run db:migrate:routing
+npm.cmd run db:migrate:simulation
+npm.cmd run db:seed
+```
+
+`CORS_ORIGIN` accepts a comma-separated allowlist. If the database provider
+requires a CA certificate, use `DB_SSL_CA` for Vercel (PEM text, optionally
+with `\\n`) or `DB_SSL_CA_PATH` for a local certificate file.
+
+## Deploy to Vercel
+
+No custom `vercel.json` is needed. `src/app.ts` exports the Express app as the
+default export for Vercel, while `src/server.ts` remains the local port
+listener.
+
+When importing the repository in Vercel:
+
+1. Set **Root Directory** to `BackEnd/smart-lunch-routing-backend`.
+2. Leave Framework Preset, Build Command, and Output Directory on automatic
+   detection. Node.js 20+ is declared in `package.json`.
+3. Add all `DB_*` values and `CORS_ORIGIN` to Production and Preview as needed.
+4. Apply migrations from a trusted local/admin environment before sending
+   traffic to the deployment. Do not run migrations inside an API request.
+5. Verify `GET /api/health`, then a DB-backed endpoint such as
+   `GET /api/customers`.
+
+For CLI deployment, run from this backend directory after signing in:
+
+```powershell
+npx.cmd vercel
+npx.cmd vercel --prod
+```
 
 ## Authoritative business rules
 

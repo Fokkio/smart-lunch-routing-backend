@@ -5,12 +5,13 @@ const value = (name: string): string | undefined => process.env[name]?.trim() ||
 const port = Number(process.env['PORT'] ?? 3000);
 const dbPort = Number(process.env['DB_PORT'] ?? NaN);
 const osrmTimeoutMs = Number(process.env['OSRM_TIMEOUT_MS'] ?? 8000);
-export const config = { port: Number.isFinite(port) ? port : 3000, corsOrigin: value('CORS_ORIGIN'), osrm: {
+const dbConnectionLimit = Number(process.env['DB_CONNECTION_LIMIT'] ?? (process.env['VERCEL'] ? 2 : 10));
+export const config = { port: Number.isFinite(port) ? port : 3000, corsOrigins: (value('CORS_ORIGIN') ?? '').split(',').map((origin) => origin.trim()).filter(Boolean), osrm: {
   // Single owner of the OSRM URL. Default is the public OSRM demo server —
   // a development convenience, NOT production infrastructure.
   baseUrl: value('OSRM_BASE_URL') ?? 'https://router.project-osrm.org',
   timeoutMs: Number.isFinite(osrmTimeoutMs) && osrmTimeoutMs > 0 ? osrmTimeoutMs : 8000,
-}, db: { host: value('DB_HOST'), port: Number.isFinite(dbPort) ? dbPort : 3306, user: value('DB_USER'), password: value('DB_PASSWORD'), database: value('DB_NAME'), ssl: value('DB_SSL')?.toLowerCase() === 'true', caPath: value('DB_SSL_CA_PATH') } };
+}, db: { host: value('DB_HOST'), port: Number.isFinite(dbPort) ? dbPort : 3306, user: value('DB_USER'), password: value('DB_PASSWORD'), database: value('DB_NAME'), ssl: value('DB_SSL')?.toLowerCase() === 'true', ca: value('DB_SSL_CA')?.replace(/\\n/g, '\n'), caPath: value('DB_SSL_CA_PATH'), connectionLimit: Number.isInteger(dbConnectionLimit) && dbConnectionLimit > 0 ? dbConnectionLimit : 2 } };
 
 const REQUIRED_DB_VARS = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'] as const;
 
@@ -36,7 +37,7 @@ export function databaseConfigError(
     }
   }
 
-  if (config.db.ssl && config.db.caPath && !fileExists(config.db.caPath)) {
+  if (config.db.ssl && !config.db.ca && config.db.caPath && !fileExists(config.db.caPath)) {
     lines.push('SSL certificate not found:');
     lines.push(config.db.caPath);
   }

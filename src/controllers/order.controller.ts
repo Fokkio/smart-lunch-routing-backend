@@ -1,16 +1,45 @@
 import type { NextFunction, Request, Response } from 'express';
 import { OrderService } from '../services/order.service';
+import { parseNearbyQuery, parseSimulationRequest } from './request-validation';
 
 /** Thin HTTP adapter — no SQL, no business rules here. */
 export class OrderController {
   static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // Case-insensitive: ?status=PENDING must filter exactly like ?status=pending.
-      if (String(req.query['status'] ?? '').toLowerCase() === 'pending') {
-        res.json(await OrderService.findPending());
-        return;
-      }
-      res.json(await OrderService.findAll());
+      res.json(await OrderService.findAll({
+        status: typeof req.query['status'] === 'string' ? req.query['status'] : undefined,
+        date: typeof req.query['date'] === 'string' ? req.query['date'] : undefined,
+        customerId: typeof req.query['customerId'] === 'string' ? req.query['customerId'] : undefined,
+      }));
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async nearby(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { lat, lng, radiusKm } = parseNearbyQuery(
+        req.query['lat'], req.query['lng'], req.query['radiusKm'], 2,
+      );
+      res.json(await OrderService.findNearby(lat, lng, radiusKm));
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async simulate(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { count, orderDate } = parseSimulationRequest(req.body?.count, req.body?.orderDate);
+      const orders = await OrderService.createSimulated(count, orderDate);
+      res.status(201).json({ createdCount: orders.length, orders });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async clearSimulated(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json({ deletedCount: await OrderService.deleteSimulated() });
     } catch (err) {
       next(err);
     }
