@@ -15,6 +15,17 @@ function validate(input: Partial<CustomerInput>): void {
     }
   }
 
+  // Phone number
+  // เบอร์โทรต้องเป็นข้อความ เพื่อรักษาเลข 0 ด้านหน้า
+  // ตอนแก้ไข ถ้าไม่ส่ง phone มา ให้ใช้ค่าเดิม
+  if (input.phone !== undefined) {
+    if (typeof input.phone !== "string" || input.phone.trim() === "") {
+      throw Object.assign(new Error("phone must be a non-empty string"), {
+        statusCode: 400,
+      });
+    }
+  }
+
   if (
     input.lat !== undefined &&
     (!Number.isFinite(input.lat) || input.lat < -90 || input.lat > 90)
@@ -55,11 +66,10 @@ export class CustomerService {
   }
 
   static create(input: CustomerInput): Promise<Customer> {
-
     // check input first
     validate(input);
 
-  // การสร้างลูกค้าใหม่ต้องส่งข้อมูลจำเป็นให้ครบ
+    // การสร้างลูกค้าใหม่ต้องส่งข้อมูลจำเป็นให้ครบ
     if (
       !input.name?.trim() ||
       !input.phone?.trim() ||
