@@ -15,7 +15,6 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-
 // DEScribe customer name
 describe("Customer name validation", () => {
   it("rejects a blank name when creating a customer", async () => {
@@ -66,8 +65,7 @@ describe("Customer name validation", () => {
   });
 });
 
-
-// describe customer phone 
+// describe customer phone
 describe("Customer phone validation", () => {
   it("rejects a blank phone when updating a customer", async () => {
     await expect(
@@ -98,7 +96,7 @@ describe("Customer phone validation", () => {
 });
 
 // DESCRIBE 3 กรณี ส่งตัวเลขหรือ null มาแทนชื่อ/เบอร์โทร
-describe('Customer field types', () => {
+describe("Customer field types", () => {
   // จำลองข้อมูลผิดชนิดที่อาจส่งมาทาง HTTP
   const invalidFields = [
     { name: 123 },
@@ -108,11 +106,11 @@ describe('Customer field types', () => {
   ];
 
   it.each(invalidFields)(
-    'rejects invalid field types on create: %j',
+    "rejects invalid field types on create: %j",
     async (invalidField) => {
       const input = {
-        name: 'ลูกค้าทดสอบ',
-        phone: '0812345678',
+        name: "ลูกค้าทดสอบ",
+        phone: "0812345678",
         lat: 16.2469,
         lng: 103.2531,
         ...invalidField,
@@ -127,15 +125,91 @@ describe('Customer field types', () => {
   );
 
   it.each(invalidFields)(
-    'rejects invalid field types on update: %j',
+    "rejects invalid field types on update: %j",
     async (invalidField) => {
       const input = invalidField as unknown as Partial<CustomerInput>;
 
       await expect(
-        Promise.resolve().then(() => CustomerService.update('1', input)),
+        Promise.resolve().then(() => CustomerService.update("1", input)),
       ).rejects.toMatchObject({ statusCode: 400 });
 
       expect(CustomerModel.update).not.toHaveBeenCalled();
     },
   );
+});
+
+// Describe 4
+// ตรวจว่าข้อมูลที่ส่งเข้ามาต้องเป็น object ก่อนอ่าน field ภายใน
+// เพื่อป้องกัน runtime error จาก null, undefined หรือข้อมูลผิดรูปแบบ
+describe("Customer input structure", () => {
+  const invalidInputs = [null, undefined, "hello", 123, []];
+
+  it.each(invalidInputs)(
+    "rejects invalid input before accessing fields: %j",
+    async (value) => {
+      const input = value as unknown as CustomerInput;
+
+      await expect(
+        Promise.resolve().then(() => CustomerService.create(input)),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      await expect(
+        Promise.resolve().then(() => CustomerService.update("1", input)),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      expect(CustomerModel.create).not.toHaveBeenCalled();
+      expect(CustomerModel.update).not.toHaveBeenCalled();
+    },
+  );
+});
+
+//describe 5 test ความยาวตรงกันกับ Database
+describe("Customer field lengths", () => {
+  it.each([{ name: "ก".repeat(151) }, { phone: "0".repeat(21) }])(
+    "rejects fields exceeding database limits: %j",
+    async (fields) => {
+      const input = {
+        name: "ลูกค้าทดสอบ",
+        phone: "0812345678",
+        lat: 16.2469,
+        lng: 103.2531,
+        ...fields,
+      };
+
+      await expect(
+        Promise.resolve().then(() => CustomerService.create(input)),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      await expect(
+        Promise.resolve().then(() => CustomerService.update("1", fields)),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      expect(CustomerModel.create).not.toHaveBeenCalled();
+      expect(CustomerModel.update).not.toHaveBeenCalled();
+    },
+  );
+});
+
+// describe 6 ADDRESS VALIDATION
+describe("Customer address validation", () => {
+  it.each([123, {}, []])("rejects an invalid address: %j", async (address) => {
+    const input = {
+      name: "ลูกค้าทดสอบ",
+      phone: "0812345678",
+      lat: 16.2469,
+      lng: 103.2531,
+      address,
+    } as unknown as CustomerInput;
+
+    await expect(
+      Promise.resolve().then(() => CustomerService.create(input)),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    await expect(
+      Promise.resolve().then(() => CustomerService.update("1", input)),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(CustomerModel.create).not.toHaveBeenCalled();
+    expect(CustomerModel.update).not.toHaveBeenCalled();
+  });
 });

@@ -6,10 +6,25 @@ import {
 } from "../models/customer.model";
 
 function validate(input: Partial<CustomerInput>): void {
+  // ต้องได้รับข้อมูลลูกค้าเป็น object ก่อน จึงอ่าน name/phone ได้ (ถ้าตรวจแค่ name เวลา null ทั้งก้อน ตอนอ่านจะพัง)
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw Object.assign(new Error("customer data must be an object"), {
+      statusCode: 400,
+    });
+  }
+
   // NAME
   if (input.name !== undefined) {
+    // ตรวจว่าเป็น string และห้ามว่าง
     if (typeof input.name !== "string" || input.name.trim() === "") {
       throw Object.assign(new Error("name must be a non-empty string"), {
+        statusCode: 400,
+      });
+    }
+
+    // นับตัวอักษรให้เท่ากับความยาวช่องในฐานข้อมูล
+    if (Array.from(input.name).length > 150) {
+      throw Object.assign(new Error("name must not exceed 150 characters"), {
         statusCode: 400,
       });
     }
@@ -19,13 +34,33 @@ function validate(input: Partial<CustomerInput>): void {
   // เบอร์โทรต้องเป็นข้อความ เพื่อรักษาเลข 0 ด้านหน้า
   // ตอนแก้ไข ถ้าไม่ส่ง phone มา ให้ใช้ค่าเดิม
   if (input.phone !== undefined) {
+    // ตรวจว่าเป็น string และห้ามว่าง
     if (typeof input.phone !== "string" || input.phone.trim() === "") {
       throw Object.assign(new Error("phone must be a non-empty string"), {
         statusCode: 400,
       });
     }
+
+    // ความยาวต้องตรงกับฐานข้อมูล
+    if (Array.from(input.phone).length > 20) {
+      throw Object.assign(new Error("phone must not exceed 20 characters"), {
+        statusCode: 400,
+      });
+    }
   }
 
+  // ที่อยู่ไม่บังคับกรอก แต่ถ้ามีค่าต้องเป็นข้อความหรือ null
+  if (
+    input.address !== undefined &&
+    input.address !== null &&
+    typeof input.address !== "string"
+  ) {
+    throw Object.assign(new Error("address must be a string or null"), {
+      statusCode: 400,
+    });
+  }
+
+  // พิกัด lat lng
   if (
     input.lat !== undefined &&
     (!Number.isFinite(input.lat) || input.lat < -90 || input.lat > 90)
