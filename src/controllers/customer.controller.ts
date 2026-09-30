@@ -8,7 +8,7 @@ export class CustomerController {
     try {
       const search = typeof req.query['search'] === 'string' ? req.query['search'].trim() : '';
       if (search) {
-        res.json(await CustomerService.searchByName(search));
+        res.json(await CustomerService.search(search));
         return;
       }
       res.json(await CustomerService.findAll());

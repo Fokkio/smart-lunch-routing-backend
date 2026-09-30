@@ -49,11 +49,19 @@ export class CustomerModel {
     return rows.map(map);
   }
 
-  static async searchByName(query: string): Promise<Customer[]> {
+  // ค้นหาลูกค้าจากบางส่วนของชื่อ เบอร์โทร หรือที่อยู่
+  static async search(query: string): Promise<Customer[]> {
+    const keyword = `%${query}%`;
+
     const [rows] = await getPool().execute<Row[]>(
-      "SELECT * FROM customers WHERE name LIKE ? ORDER BY name, customer_id",
-      [`%${query}%`],
+      `SELECT * FROM customers
+     WHERE name LIKE ?
+        OR phone LIKE ?
+        OR address LIKE ?
+     ORDER BY name, customer_id`,
+      [keyword, keyword, keyword],
     );
+
     return rows.map(map);
   }
 

@@ -84,8 +84,8 @@ export class CustomerService {
     return CustomerModel.findAll();
   }
 
-  static searchByName(query: string): Promise<Customer[]> {
-    return CustomerModel.searchByName(query);
+  static search(query: string): Promise<Customer[]> {
+    return CustomerModel.search(query);
   }
 
   static findNearby(
