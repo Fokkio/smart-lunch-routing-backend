@@ -8,6 +8,7 @@ vi.mock("../../models/customer.model", () => ({
   CustomerModel: {
     create: vi.fn(),
     update: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -211,5 +212,28 @@ describe("Customer address validation", () => {
 
     expect(CustomerModel.create).not.toHaveBeenCalled();
     expect(CustomerModel.update).not.toHaveBeenCalled();
+  });
+});
+
+// describe 6 Delete
+describe("Customer deletion", () => {
+  it("reports a conflict when orders reference the customer", async () => {
+    // จำลอง error ที่ model ได้จากฐานข้อมูล
+    vi.mocked(CustomerModel.delete).mockRejectedValueOnce({
+      code: "ER_ROW_IS_REFERENCED_2",
+    });
+
+    await expect(CustomerService.delete("1")).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Cannot delete customer with existing orders",
+    });
+  });
+
+  it("preserves unrelated database errors", async () => {
+    const databaseError = new Error("Connection failed");
+
+    vi.mocked(CustomerModel.delete).mockRejectedValueOnce(databaseError);
+
+    await expect(CustomerService.delete("1")).rejects.toBe(databaseError);
   });
 });

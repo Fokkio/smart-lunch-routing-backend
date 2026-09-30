@@ -126,7 +126,26 @@ export class CustomerService {
     return CustomerModel.update(id, input);
   }
 
-  static delete(id: string): Promise<boolean> {
-    return CustomerModel.delete(id);
+  // DELETE
+  static async delete(id: string): Promise<boolean> {
+    try {
+      return await CustomerModel.delete(id);
+    } catch (error) {
+      // ฐานข้อมูลปฏิเสธการลบ เพราะมีข้อมูลอื่นอ้างอิงลูกค้านี้
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "ER_ROW_IS_REFERENCED_2"
+      ) {
+        throw Object.assign(
+          new Error("Cannot delete customer with existing orders"),
+          { statusCode: 409 },
+        );
+      }
+
+      // ข้อผิดพลาดอื่นส่งต่อ ไม่เหมารวมว่าเกิดจากออเดอร์
+      throw error;
+    }
   }
 }
