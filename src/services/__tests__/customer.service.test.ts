@@ -314,7 +314,7 @@ describe("Customer deletion", () => {
     });
   });
 
-  // DESCRIBE 9 format thai MB phone 
+  // DESCRIBE 9 format thai MB phone
   describe("Thai mobile phone rules", () => {
     it.each([
       ["061-234-5678", "0612345678"],
@@ -380,5 +380,35 @@ describe("Customer deletion", () => {
       expect(CustomerModel.create).not.toHaveBeenCalled();
       expect(CustomerModel.update).not.toHaveBeenCalled();
     });
+  });
+
+  // DESCRIBE 10: เบอร์ซ้ำ
+  describe("Duplicate customer phone", () => {
+    it.each(["create", "update"] as const)(
+      "returns 409 when %s encounters a duplicate phone",
+      async (operation) => {
+        const input = {
+          name: "ลูกค้าทดสอบ",
+          phone: "0812345678",
+          lat: 16.2469,
+          lng: 103.2531,
+        };
+
+        // จำลองข้อผิดพลาดเบอร์ซ้ำที่ฐานข้อมูลส่งกลับ
+        vi.mocked(CustomerModel[operation]).mockRejectedValueOnce({
+          code: "ER_DUP_ENTRY",
+        });
+
+        const request =
+          operation === "create"
+            ? CustomerService.create(input)
+            : CustomerService.update("1", input);
+
+        await expect(request).rejects.toMatchObject({
+          statusCode: 409,
+          message: "Phone number is already used by another customer",
+        });
+      },
+    );
   });
 });

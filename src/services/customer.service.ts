@@ -99,6 +99,23 @@ function validateCustomerId(id: string): void {
   }
 }
 
+// แปลงข้อผิดพลาดเบอร์ซ้ำจากฐานข้อมูลเป็น HTTP 409
+function handleCustomerWriteError(error: unknown): never {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "ER_DUP_ENTRY"
+  ) {
+    throw Object.assign(
+      new Error("Phone number is already used by another customer"),
+      { statusCode: 409 },
+    );
+  }
+
+  throw error;
+}
+
 export class CustomerService {
   static findAll(): Promise<Customer[]> {
     return CustomerModel.findAll();
@@ -121,7 +138,7 @@ export class CustomerService {
     return CustomerModel.findById(id);
   }
 
-  static create(input: CustomerInput): Promise<Customer> {
+  static async create(input: CustomerInput): Promise<Customer> {
     // check input first
     validate(input);
 
@@ -136,26 +153,34 @@ export class CustomerService {
         statusCode: 400,
       });
     }
-    return CustomerModel.create({
-      ...input,
-      phone: normalizePhone(input.phone),
-    });
+    try {
+      return await CustomerModel.create({
+        ...input,
+        phone: normalizePhone(input.phone),
+      });
+    } catch (error) {
+      handleCustomerWriteError(error);
+    }
   }
 
-  static update(
+  static async update(
     id: string,
     input: Partial<CustomerInput>,
   ): Promise<Customer | null> {
     validateCustomerId(id);
     validate(input);
-    
+
     // ถ้าแก้เฉพาะชื่อโดยไม่ส่งเบอร์มา ให้คงเบอร์เดิมไว้
     const normalizedInput =
       input.phone === undefined
         ? input
         : { ...input, phone: normalizePhone(input.phone) };
 
-    return CustomerModel.update(id, normalizedInput);
+    try {
+      return await CustomerModel.update(id, normalizedInput);
+    } catch (error) {
+      handleCustomerWriteError(error);
+    }
   }
 
   // DELETE
