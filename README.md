@@ -159,7 +159,9 @@ Use the application database user for runtime. Do not use TiDB root/admin as
 
 Copy `.env.example` to `.env`, fill in the database values, then apply the
 migrations in order. Migration 003 marks generated orders so the clear
-endpoint cannot delete real orders.
+endpoint cannot delete real orders. `database/schema.sql` is a reference
+schema for a fresh database; do not run it together with migrations 001–003,
+because it already contains `orders.is_simulated`.
 
 ```powershell
 npm.cmd run db:migrate
