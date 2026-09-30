@@ -1,6 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
 import { CustomerService } from '../services/customer.service';
-import { parseNearbyQuery } from './request-validation';
 
 /** Thin HTTP adapter — no SQL, no business rules here. */
 export class CustomerController {
@@ -12,30 +11,6 @@ export class CustomerController {
         return;
       }
       res.json(await CustomerService.findAll());
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  static async nearby(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { lat, lng, radiusKm } = parseNearbyQuery(
-        req.query['lat'], req.query['lng'], req.query['radiusKm'], 1,
-      );
-      res.json(await CustomerService.findNearby(lat, lng, radiusKm));
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  static async get(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const customer = await CustomerService.findById(req.params['id'] as string);
-      if (!customer) {
-        res.status(404).json({ message: 'Customer not found' });
-        return;
-      }
-      res.json(customer);
     } catch (err) {
       next(err);
     }

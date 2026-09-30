@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { OrderService } from '../services/order.service';
-import { parseNearbyQuery, parseSimulationRequest } from './request-validation';
+import { parseSimulationRequest } from './request-validation';
 
 /** Thin HTTP adapter — no SQL, no business rules here. */
 export class OrderController {
@@ -11,17 +11,6 @@ export class OrderController {
         date: typeof req.query['date'] === 'string' ? req.query['date'] : undefined,
         customerId: typeof req.query['customerId'] === 'string' ? req.query['customerId'] : undefined,
       }));
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  static async nearby(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { lat, lng, radiusKm } = parseNearbyQuery(
-        req.query['lat'], req.query['lng'], req.query['radiusKm'], 2,
-      );
-      res.json(await OrderService.findNearby(lat, lng, radiusKm));
     } catch (err) {
       next(err);
     }
@@ -40,19 +29,6 @@ export class OrderController {
   static async clearSimulated(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       res.json({ deletedCount: await OrderService.deleteSimulated() });
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  static async get(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const order = await OrderService.findById(req.params['id'] as string);
-      if (!order) {
-        res.status(404).json({ message: 'Order not found' });
-        return;
-      }
-      res.json(order);
     } catch (err) {
       next(err);
     }

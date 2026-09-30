@@ -5,7 +5,6 @@ import { config } from "./config/env";
 import { errorHandler } from "./middleware/error-handler";
 
 import { customerRoutes } from "./routes/customer.routes";
-import { deliveryRoutes } from "./routes/delivery.routes";
 import { orderRoutes } from "./routes/order.routes";
 import { riderRoutes } from "./routes/rider.routes";
 import { routePlanRoutes } from "./routes/route-plan.routes";
@@ -51,7 +50,6 @@ export function createApp(): express.Express {
   app.use("/api/customers", customerRoutes);
   app.use("/api/orders", orderRoutes);
   app.use("/api/riders", riderRoutes);
-  app.use("/api/deliveries", deliveryRoutes);
   app.use("/api/route-plans", routePlanRoutes);
   app.use("/api/settings", settingsRoutes);
 
