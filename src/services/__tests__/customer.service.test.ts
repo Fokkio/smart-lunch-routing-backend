@@ -9,6 +9,7 @@ vi.mock("../../models/customer.model", () => ({
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    findById: vi.fn(),
   },
 }));
 
@@ -235,5 +236,81 @@ describe("Customer deletion", () => {
     vi.mocked(CustomerModel.delete).mockRejectedValueOnce(databaseError);
 
     await expect(CustomerService.delete("1")).rejects.toBe(databaseError);
+  });
+
+  // DESCRIBE 7 -> customer ID VALIDATE
+  describe("Customer ID validation", () => {
+    it.each(["abc", "0", "-1", "1.5", "1e2", "9007199254740992"])(
+      "rejects invalid ID %s before accessing the database",
+      async (id) => {
+        await expect(
+          Promise.resolve().then(() => CustomerService.findById(id)),
+        ).rejects.toMatchObject({ statusCode: 400 });
+
+        await expect(
+          Promise.resolve().then(() =>
+            CustomerService.update(id, { name: "ชื่อใหม่" }),
+          ),
+        ).rejects.toMatchObject({ statusCode: 400 });
+
+        await expect(CustomerService.delete(id)).rejects.toMatchObject({
+          statusCode: 400,
+        });
+
+        expect(CustomerModel.findById).not.toHaveBeenCalled();
+        expect(CustomerModel.update).not.toHaveBeenCalled();
+        expect(CustomerModel.delete).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  // Describe 8 พิกัด lat lng
+  describe("Customer coordinates", () => {
+    it.each([
+      { lat: 91 },
+      { lat: -91 },
+      { lng: 181 },
+      { lng: -181 },
+      { lat: "16.2469" },
+      { lng: null },
+    ])("rejects invalid coordinates: %j", async (coordinates) => {
+      const input = {
+        name: "ลูกค้าทดสอบ",
+        phone: "0800000000",
+        lat: 16.2469,
+        lng: 103.2531,
+        ...coordinates,
+      } as unknown as CustomerInput;
+
+      await expect(
+        Promise.resolve().then(() => CustomerService.create(input)),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      await expect(
+        Promise.resolve().then(() => CustomerService.update("1", input)),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      expect(CustomerModel.create).not.toHaveBeenCalled();
+      expect(CustomerModel.update).not.toHaveBeenCalled();
+    });
+
+    it("accepts zero coordinates", async () => {
+      const input = {
+        name: "ลูกค้าทดสอบ",
+        phone: "0800000000",
+        lat: 0,
+        lng: 0,
+      };
+
+      vi.mocked(CustomerModel.create).mockResolvedValueOnce({
+        ...input,
+        id: 1,
+        address: null,
+      });
+
+      await CustomerService.create(input);
+
+      expect(CustomerModel.create).toHaveBeenCalledWith(input);
+    });
   });
 });

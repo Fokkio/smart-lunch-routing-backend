@@ -79,6 +79,15 @@ function validate(input: Partial<CustomerInput>): void {
   }
 }
 
+// ID จาก URL ต้องเป็นเลขจำนวนเต็มบวก เช่น "1" หรือ "42"
+function validateCustomerId(id: string): void {
+  if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) {
+    throw Object.assign(new Error("customer id must be a positive integer"), {
+      statusCode: 400,
+    });
+  }
+}
+
 export class CustomerService {
   static findAll(): Promise<Customer[]> {
     return CustomerModel.findAll();
@@ -97,6 +106,7 @@ export class CustomerService {
   }
 
   static findById(id: string): Promise<Customer | null> {
+    validateCustomerId(id);
     return CustomerModel.findById(id);
   }
 
@@ -122,12 +132,15 @@ export class CustomerService {
     id: string,
     input: Partial<CustomerInput>,
   ): Promise<Customer | null> {
+    validateCustomerId(id);
     validate(input);
     return CustomerModel.update(id, input);
   }
 
   // DELETE
   static async delete(id: string): Promise<boolean> {
+    validateCustomerId(id);
+
     try {
       return await CustomerModel.delete(id);
     } catch (error) {
