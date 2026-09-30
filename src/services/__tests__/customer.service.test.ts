@@ -313,4 +313,72 @@ describe("Customer deletion", () => {
       expect(CustomerModel.create).toHaveBeenCalledWith(input);
     });
   });
+
+  // DESCRIBE 9 format thai MB phone 
+  describe("Thai mobile phone rules", () => {
+    it.each([
+      ["061-234-5678", "0612345678"],
+      [" 081 234 5678 ", "0812345678"],
+      ["0912345678", "0912345678"],
+    ])("normalizes %s before saving", async (phone, expectedPhone) => {
+      const input = {
+        name: "ลูกค้าทดสอบ",
+        phone,
+        lat: 16.2469,
+        lng: 103.2531,
+      };
+
+      const savedCustomer = {
+        ...input,
+        id: 1,
+        address: null,
+        phone: expectedPhone,
+      };
+
+      vi.mocked(CustomerModel.create).mockResolvedValueOnce(savedCustomer);
+      vi.mocked(CustomerModel.update).mockResolvedValueOnce(savedCustomer);
+
+      await CustomerService.create(input);
+      await CustomerService.update("1", { phone });
+
+      expect(CustomerModel.create).toHaveBeenCalledWith({
+        ...input,
+        phone: expectedPhone,
+      });
+
+      expect(CustomerModel.update).toHaveBeenCalledWith("1", {
+        phone: expectedPhone,
+      });
+
+      // การจัดรูปแบบต้องไม่เปลี่ยนข้อมูลต้นฉบับ
+      expect(input.phone).toBe(phone);
+    });
+
+    it.each([
+      "abcdef",
+      "0212345678",
+      "081234567",
+      "08123456789",
+      "+66812345678",
+      "081/234/5678",
+    ])("rejects unsupported phone %s", async (phone) => {
+      const input = {
+        name: "ลูกค้าทดสอบ",
+        phone,
+        lat: 16.2469,
+        lng: 103.2531,
+      };
+
+      await expect(
+        Promise.resolve().then(() => CustomerService.create(input)),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      await expect(
+        Promise.resolve().then(() => CustomerService.update("1", { phone })),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      expect(CustomerModel.create).not.toHaveBeenCalled();
+      expect(CustomerModel.update).not.toHaveBeenCalled();
+    });
+  });
 });

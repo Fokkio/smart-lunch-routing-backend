@@ -5,6 +5,11 @@ import {
   type CustomerWithDistance,
 } from "../models/customer.model";
 
+// เก็บเบอร์ในรูปแบบเดียวกัน โดยรักษาเลข 0 ด้านหน้า
+function normalizePhone(phone: string): string {
+  return phone.replace(/[\s-]/g, "");
+}
+
 function validate(input: Partial<CustomerInput>): void {
   // ต้องได้รับข้อมูลลูกค้าเป็น object ก่อน จึงอ่าน name/phone ได้ (ถ้าตรวจแค่ name เวลา null ทั้งก้อน ตอนอ่านจะพัง)
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
@@ -41,11 +46,17 @@ function validate(input: Partial<CustomerInput>): void {
       });
     }
 
+    // หลังตัดขีดและช่องว่าง ต้องเป็นมือถือ 10 หลัก
+    const phone = normalizePhone(input.phone);
+
     // ความยาวต้องตรงกับฐานข้อมูล
-    if (Array.from(input.phone).length > 20) {
-      throw Object.assign(new Error("phone must not exceed 20 characters"), {
-        statusCode: 400,
-      });
+    if (!/^0[689]\d{8}$/.test(phone)) {
+      throw Object.assign(
+        new Error(
+          "phone must be a 10-digit Thai mobile number starting with 06, 08 or 09",
+        ),
+        { statusCode: 400 },
+      );
     }
   }
 
@@ -125,7 +136,10 @@ export class CustomerService {
         statusCode: 400,
       });
     }
-    return CustomerModel.create(input);
+    return CustomerModel.create({
+      ...input,
+      phone: normalizePhone(input.phone),
+    });
   }
 
   static update(
@@ -134,7 +148,14 @@ export class CustomerService {
   ): Promise<Customer | null> {
     validateCustomerId(id);
     validate(input);
-    return CustomerModel.update(id, input);
+    
+    // ถ้าแก้เฉพาะชื่อโดยไม่ส่งเบอร์มา ให้คงเบอร์เดิมไว้
+    const normalizedInput =
+      input.phone === undefined
+        ? input
+        : { ...input, phone: normalizePhone(input.phone) };
+
+    return CustomerModel.update(id, normalizedInput);
   }
 
   // DELETE
