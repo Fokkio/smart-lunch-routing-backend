@@ -9,7 +9,7 @@ import {
 import { finishSeconds, isOnTime, timeToSeconds } from '../domain/delivery/deadline-rule';
 import type { Coordinate } from '../domain/routing/coordinate';
 import type { GeoJsonLineString, MatrixPoint } from '../domain/routing/distance.types';
-import { sequenceStops } from '../domain/routing/route-sequencer';
+import { sequenceStops, type SequencedRoute } from '../domain/routing/route-sequencer';
 import type { RoutePlanResponse, RoutePlanSummaryResponse } from '../domain/routing/route-plan.types';
 import { fetchTravelMatrixWithFallback, fetchRouteGeometrySafe } from '../infrastructure/routing/fallback-routing';
 import { OsrmClient } from '../infrastructure/routing/osrm.client';
@@ -78,16 +78,14 @@ export class RoutePlanningService {
     const startSeconds = timeToSeconds(settings.deliveryStartTime);
     const deadlineSeconds = timeToSeconds(settings.deliveryDeadline);
 
-    let attempt: { clusters: string[][]; durations: number[] } | null = null;
+    let attempt: SequencedRoute[] | null = null;
     for (let count = minimumRiders; count <= Math.min(detailed.length, riders.length); count++) {
       const clusters = clusterOrders(clusterInput, shop, count, {
         maxOrdersPerRider: maxOrders, seedOffset: options.seedOffset ?? 0,
       });
-      const durations = clusters.map(
-        (ids) => sequenceStops('SHOP', ids, matrix).totalDurationMinutes,
-      );
-      if (durations.every((d) => isOnTime(finishSeconds(startSeconds, d), deadlineSeconds))) {
-        attempt = { clusters, durations };
+      const routes = clusters.map((ids) => sequenceStops('SHOP', ids, matrix));
+      if (routes.every((route) => isOnTime(finishSeconds(startSeconds, route.totalDurationMinutes), deadlineSeconds))) {
+        attempt = routes;
         break;
       }
     }
@@ -97,16 +95,15 @@ export class RoutePlanningService {
 
     const routeProvider = new OsrmRouteProvider(osrm);
     const geometries = await Promise.all(
-      attempt.clusters.map(async (ids): Promise<GeoJsonLineString | null> => {
-        const coords = [shop, ...ids.map((id) => orderCoord(detailed, id))];
-        const route = await fetchRouteGeometrySafe(coords, routeProvider);
-        return route.geometry;
+      attempt.map(async (route): Promise<GeoJsonLineString | null> => {
+        const coords = [shop, ...route.orderIds.map((id) => orderCoord(detailed, id))];
+        const result = await fetchRouteGeometrySafe(coords, routeProvider);
+        return result.geometry;
       }),
     );
 
-    const jobs: AssembleJob[] = attempt.clusters.map((ids, i) => ({
-      // sequenceStops already chose the optimal order; reuse it (no recompute drift).
-      orderIds: sequenceStops('SHOP', ids, matrix).orderIds.map(Number),
+    const jobs: AssembleJob[] = attempt.map((route, i) => ({
+      orderIds: route.orderIds.map(Number),
       riderId: riders[i]!.id,
       geometry: geometries[i] ?? null,
     }));
