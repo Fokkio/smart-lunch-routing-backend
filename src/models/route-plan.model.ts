@@ -193,6 +193,27 @@ export class RoutePlanModel {
     return this.findFull(routePlanId);
   }
 
+  /**
+   * ลบใบงานพร้อมงานย่อย (delivery_jobs / delivery_job_orders ลบตามแบบ cascade)
+   * ถ้าใบงานเคยถูกยืนยัน ออเดอร์ที่ยังค้างอยู่ในสถานะ PLANNED จะถูกคืนเป็น
+   * PENDING เพื่อให้ลบหรือจัดงานใหม่ได้ — คืน true ถ้าลบสำเร็จ
+   */
+  static async deleteById(routePlanId: number): Promise<boolean> {
+    return withTransaction(async (conn) => {
+      const [plans] = await conn.execute<PlanRow[]>(
+        'SELECT route_plan_id FROM route_plans WHERE route_plan_id = ? FOR UPDATE', [routePlanId]);
+      if (!plans[0]) return false;
+      await conn.execute(
+        `UPDATE orders SET status = 'PENDING' WHERE status = 'PLANNED' AND order_id IN
+         (SELECT order_id FROM delivery_job_orders WHERE delivery_job_id IN
+          (SELECT delivery_job_id FROM delivery_jobs WHERE route_plan_id = ?))`,
+        [routePlanId],
+      );
+      await conn.execute('DELETE FROM route_plans WHERE route_plan_id = ?', [routePlanId]);
+      return true;
+    });
+  }
+
   private static async mapJob(
     job: JobRow,
     riderIndex: number,

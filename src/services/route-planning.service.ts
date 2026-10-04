@@ -146,6 +146,10 @@ export class RoutePlanningService {
   static select(id: number): Promise<RoutePlanResponse | null> {
     return RoutePlanModel.select(id);
   }
+
+  static delete(id: number): Promise<boolean> {
+    return RoutePlanModel.deleteById(id);
+  }
 }
 
 function orderCoord(orders: AssembleOrder[], id: string): Coordinate {

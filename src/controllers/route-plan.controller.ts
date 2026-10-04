@@ -64,6 +64,19 @@ export class RoutePlanController {
       next(error);
     }
   }
+
+  static async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const deleted = await RoutePlanningService.delete(Number(req.params['id']));
+      if (!deleted) {
+        res.status(404).json({ message: 'RoutePlan not found' });
+        return;
+      }
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 function validatedDate(value: unknown, res: Response): string | null {
