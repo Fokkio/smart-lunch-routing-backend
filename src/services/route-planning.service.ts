@@ -95,17 +95,19 @@ export class RoutePlanningService {
 
     const routeProvider = new OsrmRouteProvider(osrm);
     const geometries = await Promise.all(
-      attempt.map(async (route): Promise<GeoJsonLineString | null> => {
+      attempt.map(async (route) => {
         const coords = [shop, ...route.orderIds.map((id) => orderCoord(detailed, id))];
         const result = await fetchRouteGeometrySafe(coords, routeProvider);
-        return result.geometry;
+        return result;
       }),
     );
 
     const jobs: AssembleJob[] = attempt.map((route, i) => ({
       orderIds: route.orderIds.map(Number),
       riderId: riders[i]!.id,
-      geometry: geometries[i] ?? null,
+      geometry: geometries[i]?.geometry ?? null,
+      legGeometries: geometries[i]?.legGeometries?.length === route.orderIds.length
+        ? geometries[i]!.legGeometries : undefined,
     }));
 
     const plan = assembleRoutePlan({

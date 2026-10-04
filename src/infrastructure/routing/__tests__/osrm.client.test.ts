@@ -26,6 +26,19 @@ const SHOP = { latitude: 16.24631, longitude: 103.25286 };
 const STOP = { latitude: 16.25, longitude: 103.26 };
 
 describe('OsrmClient route conversion', () => {
+  it('keeps each OSRM leg separate for its destination order', async () => {
+    const route = await CLIENT(okFetch({ code: 'Ok', routes: [{
+      distance: 20, duration: 5,
+      geometry: { type: 'LineString', coordinates: [[1, 1], [2, 2], [3, 3]] },
+      legs: [
+        { steps: [{ geometry: { type: 'LineString', coordinates: [[1, 1], [1.5, 1.5]] } }, { geometry: { type: 'LineString', coordinates: [[1.5, 1.5], [2, 2]] } }] },
+        { steps: [{ geometry: { type: 'LineString', coordinates: [[2, 2], [3, 3]] } }] },
+      ],
+    }] })).getRoute([SHOP, STOP, SHOP]);
+    expect(route.legGeometries?.map(leg => leg.coordinates)).toEqual([
+      [[1, 1], [1.5, 1.5], [2, 2]], [[2, 2], [3, 3]],
+    ]);
+  });
   it('converts metres/seconds to km/minutes with source ROAD semantics', async () => {
     const client = CLIENT(okFetch(VALID_ROUTE));
     const route = await client.getRoute([SHOP, STOP]);

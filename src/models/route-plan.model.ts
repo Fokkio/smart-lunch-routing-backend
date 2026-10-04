@@ -44,6 +44,7 @@ export type StopRow = RowDataPacket & {
   customer_phone: string | null; customer_address: string | null;
   customer_latitude: number; customer_longitude: number;
   delivery_status: 'WAITING' | 'DELIVERING' | 'DELIVERED';
+  leg_geometry: string | object | null;
 };
 
 /**
@@ -127,12 +128,13 @@ export class RoutePlanModel {
         for (const stop of job.stops) {
           await conn.execute(
             `INSERT INTO delivery_job_orders(delivery_job_id,order_id,stop_sequence,
-             distance_from_previous_km,travel_time_from_previous_min,estimated_arrival_time)
-             VALUES(?,?,?,?,?,?)`,
+             distance_from_previous_km,travel_time_from_previous_min,estimated_arrival_time,leg_geometry)
+             VALUES(?,?,?,?,?,?,?)`,
             [
               deliveryJobId, stop.orderId, stop.sequence,
               stop.distanceFromPreviousKm, stop.travelTimeFromPreviousMin,
               toTime(stop.estimatedArrivalTime),
+              stop.geometry ? JSON.stringify(stop.geometry) : null,
             ],
           );
         }
@@ -283,6 +285,7 @@ export class RoutePlanModel {
 
 const STOP_QUERY = `SELECT jbo.order_id, jbo.stop_sequence, jbo.distance_from_previous_km,
         jbo.travel_time_from_previous_min, jbo.estimated_arrival_time,
+        jbo.leg_geometry,
         CASE WHEN o.status='DELIVERED' THEN 'DELIVERED'
              WHEN o.status='DELIVERING' THEN 'DELIVERING' ELSE 'WAITING' END AS delivery_status,
         o.customer_id, o.box_count, c.name AS customer_name, c.phone AS customer_phone,
@@ -354,6 +357,7 @@ export function toJobResponse(
         travelTimeFromPreviousMin: Number(s.travel_time_from_previous_min ?? 0),
         estimatedArrivalTime: hhmm(s.estimated_arrival_time),
         deliveryStatus: s.delivery_status,
+        geometry: parseGeometry(s.leg_geometry),
       })),
     };
 }

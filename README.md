@@ -168,6 +168,7 @@ npm.cmd run db:migrate
 npm.cmd run db:migrate:routing
 npm.cmd run db:migrate:simulation
 npm.cmd run db:migrate:cost-formula
+npx.cmd tsx scripts/run-sql.ts database/migrations/005_order_route_geometry.sql
 npm.cmd run db:init-settings
 ```
 

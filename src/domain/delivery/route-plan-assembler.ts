@@ -39,6 +39,7 @@ export interface AssembleJob {
   orderIds: number[];
   riderId: number | null;
   geometry: GeoJsonLineString | null;
+  legGeometries?: Array<GeoJsonLineString | null>;
 }
 
 export interface AssembleInput {
@@ -91,7 +92,7 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
       deliveryCost: 0, // filled below from shared cost calculation
       geometry: job.geometry,
       approximate: input.matrix.approximate,
-      stops,
+      stops: stops.map((stop, index) => ({ ...stop, geometry: job.legGeometries?.[index] ?? null })),
     };
   });
 

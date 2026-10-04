@@ -71,6 +71,14 @@ function examInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
 }
 
 describe('assembleRoutePlan exam', () => {
+  it('attaches each road leg to the destination order in stop sequence', () => {
+    const first = { type: 'LineString' as const, coordinates: [[1, 1], [2, 2]] as Array<[number, number]> };
+    const second = { type: 'LineString' as const, coordinates: [[2, 2], [3, 3]] as Array<[number, number]> };
+    const input = examInput();
+    input.jobs[0]!.legGeometries = [first, second];
+    const stops = assembleRoutePlan(input).jobs[0]!.stops;
+    expect(stops.map(stop => [stop.orderId, stop.geometry])).toEqual([[3, first], [4, second]]);
+  });
   it('produces the known-answer RoutePlan', () => {
     const plan = assembleRoutePlan(examInput());
     expect(plan.riderCount).toBe(2);
