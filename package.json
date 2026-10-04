@@ -18,11 +18,16 @@
     "db:migrate:routing": "tsx scripts/run-sql.ts database/migrations/002_routing_metadata.sql",
     "db:migrate:simulation": "tsx scripts/run-sql.ts database/migrations/003_simulated_orders.sql",
     "db:migrate:cost-formula": "tsx scripts/run-sql.ts database/migrations/004_rider_cost_formula.sql",
+    "db:migrate:accounts": "tsx scripts/migrate-accounts.ts",
+    "db:create-owner": "tsx scripts/create-owner.ts",
+    "db:prune-drafts": "tsx scripts/prune-draft-plans.ts",
     "db:seed": "tsx scripts/init-shop-settings.ts",
     "verify:live-osrm": "tsx scripts/live-verify-osrm.ts",
-    "db:init-settings": "tsx scripts/init-shop-settings.ts"
+    "db:init-settings": "tsx scripts/init-shop-settings.ts",
+    "db:clear": "tsx scripts/clear-database.ts"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",

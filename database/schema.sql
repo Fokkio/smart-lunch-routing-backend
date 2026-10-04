@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   admin_user_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   username VARCHAR(100) NOT NULL,
   display_name VARCHAR(150) NULL,
-  password_hash VARCHAR(255) NOT NULL COMMENT 'Store a bcrypt/argon2 hash only; never a plain-text password.',
+  password_hash VARCHAR(255) NOT NULL COMMENT 'bcrypt cost 10 hash only; never a plain-text password.',
   role ENUM('OWNER','ADMIN') NOT NULL DEFAULT 'OWNER',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   last_login_at DATETIME NULL,
@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS riders (
   rider_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   rider_name VARCHAR(150) NOT NULL,
   phone VARCHAR(30) NULL,
-  password_hash VARCHAR(255) NULL COMMENT 'Nullable because rider login is implemented later.',
+  password_hash VARCHAR(255) NULL COMMENT 'bcrypt cost 10; null until owner sets a password.',
+  login_enabled TINYINT(1) NOT NULL DEFAULT 1,
   is_available TINYINT(1) NOT NULL DEFAULT 1,
   status ENUM('ACTIVE','INACTIVE','SUSPENDED') NOT NULL DEFAULT 'ACTIVE',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -142,7 +143,7 @@ CREATE TABLE IF NOT EXISTS delivery_jobs (
   estimated_finish_time TIME NULL,
   delivery_cost DECIMAL(10,2) NULL,
   route_geometry JSON NULL COMMENT 'GeoJSON LineString from shop to ordered stops; coordinates are [lng, lat].',
-  status ENUM('ASSIGNED','DELIVERING','DELIVERED','CANCELLED') NOT NULL DEFAULT 'ASSIGNED',
+  status ENUM('WAITING','DELIVERING','COMPLETED') NOT NULL DEFAULT 'WAITING',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (delivery_job_id),
@@ -184,19 +185,18 @@ CREATE TABLE IF NOT EXISTS delivery_job_orders (
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS deliveries (
-  id VARCHAR(40) NOT NULL,
-  rider_id INT UNSIGNED NOT NULL,
-  route_plan_id INT UNSIGNED NULL,
-  delivery_job_id INT UNSIGNED NULL,
-  status ENUM('ASSIGNED','DELIVERING','DELIVERED','CANCELLED') NOT NULL DEFAULT 'ASSIGNED',
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token_hash CHAR(64) NOT NULL PRIMARY KEY,
+  actor_type ENUM('OWNER','RIDER') NOT NULL,
+  actor_id INT NOT NULL,
+  expires_at DATETIME NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_deliveries_rider (rider_id),
-  KEY idx_deliveries_route_plan (route_plan_id),
-  KEY idx_deliveries_job (delivery_job_id),
-  CONSTRAINT fk_deliveries_rider FOREIGN KEY (rider_id) REFERENCES riders (rider_id),
-  CONSTRAINT fk_deliveries_route_plan FOREIGN KEY (route_plan_id) REFERENCES route_plans (route_plan_id) ON DELETE SET NULL,
-  CONSTRAINT fk_deliveries_job FOREIGN KEY (delivery_job_id) REFERENCES delivery_jobs (delivery_job_id) ON DELETE SET NULL
+  KEY idx_auth_sessions_expiry (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS auth_login_attempts (
+  subject_hash CHAR(64) NOT NULL PRIMARY KEY,
+  failed_count INT NOT NULL DEFAULT 0,
+  window_started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  blocked_until DATETIME NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

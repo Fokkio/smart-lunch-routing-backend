@@ -45,12 +45,6 @@ POST /api/route-plans/generate → RoutePlanController → RoutePlanningService
   → deadline gate → cost → RoutePlanModel → TiDB
 ```
 
-Legacy demo flow (kept, payload-based, no DB):
-
-```
-POST /api/deliveries/plan → DeliveryController → DeliveryService → RoutePlanner
-```
-
 ## Structure
 
 The backend follows the controller/data-access separation taught in the
@@ -129,7 +123,11 @@ Health check: `GET http://localhost:3000/api/health`
 - `GET /api/route-plans?date=` → plan summaries
 - `GET /api/route-plans/:id` → full plan with jobs, stops, geometry
 - `POST /api/route-plans/:id/select` → SELECTED + orders move PENDING → PLANNED
-- Legacy demo (kept): `POST /api/deliveries/plan`, `POST /api/deliveries/plan-from-database`
+- `POST /api/auth/login` creates an owner or rider session; `GET /api/auth/me` checks it; `POST /api/auth/logout` revokes it.
+- `PUT /api/auth/password` lets a signed-in rider change their own password.
+- `GET /api/my-jobs?date=YYYY-MM-DD` returns only the signed-in rider's selected jobs.
+- `POST /api/my-jobs/:jobId/stops/:orderId/deliver` checks rider ownership inside the delivery transaction.
+- `PUT /api/riders/:id/password` lets an owner set or reset a rider password.
 
 Without DB credentials, DB-backed routes answer 503; bad `planDate` answers
 400; infeasible/no-order generations answer 422. Docs: `docs/distance-domain.md`,
@@ -172,6 +170,19 @@ npx.cmd tsx scripts/run-sql.ts database/migrations/005_order_route_geometry.sql
 npm.cmd run db:init-settings
 ```
 
+Apply the account migration once before deploying the login UI. It checks existing columns, so it also works on databases that already have `admin_users` and `riders.password_hash`:
+
+```powershell
+npm.cmd run db:migrate:accounts
+npm.cmd run db:create-owner
+```
+
+`db:create-owner` prompts for the username and password without echoing either value. It refuses to overwrite an existing owner. Passwords are bcrypt hashes at cost 10; plaintext passwords are not written to the repository. Rider usernames are their numeric `rider_id`. The owner sets a rider's initial password from the rider management page; riders can change their own password after login. Both password changes revoke existing rider sessions.
+
+All customer, order, route-plan, rider-management and settings endpoints require an owner session. Rider job endpoints require a rider session. Sessions expire after 12 hours. Deploy backend and frontend together after running the migration; an old frontend cannot call the newly protected API.
+
+`npm.cmd run db:prune-drafts` previews generated/rejected plans older than 30 days. `npm.cmd run db:prune-drafts -- --apply` deletes only those drafts. Selected plans are excluded, and plans with completed deliveries cannot be deleted through the API. The old `deliveries` table is not used by runtime code; the reference schema no longer creates it. Remove an existing empty table only with a database account that has `DROP` privilege.
+
 `CORS_ORIGIN` accepts a comma-separated allowlist. If the database provider
 requires a CA certificate, use `DB_SSL_CA` for Vercel (PEM text, optionally
 with `\\n`) or `DB_SSL_CA_PATH` for a local certificate file.
@@ -190,8 +201,7 @@ When importing the repository in Vercel:
 3. Add all `DB_*` values and `CORS_ORIGIN` to Production and Preview as needed.
 4. Apply migrations from a trusted local/admin environment before sending
    traffic to the deployment. Do not run migrations inside an API request.
-5. Verify `GET /api/health`, then a DB-backed endpoint such as
-   `GET /api/customers`.
+5. Verify `GET /api/health`, then log in and call a DB-backed endpoint with the returned bearer token.
 
 For CLI deployment, run from this backend directory after signing in:
 
@@ -220,7 +230,7 @@ npx.cmd vercel --prod
 
 ## Open TODOs
 
-Legacy migration notes, live OSRM verification (unit tests mock HTTP), richer alternative-plan strategies, rider job page. See code
+Legacy migration notes, live OSRM verification (unit tests mock HTTP), richer alternative-plan strategies. See code
 `TODO` comments and `docs/routing-pipeline.md`.
 
 

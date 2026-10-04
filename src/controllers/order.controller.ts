@@ -30,6 +30,19 @@ export class OrderController {
     }
   }
 
+  static async get(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const order = await OrderService.findById(req.params['id'] as string);
+      if (!order) {
+        res.status(404).json({ message: 'Order not found' });
+        return;
+      }
+      res.json(order);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async simulate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { count, orderDate } = parseSimulationRequest(req.body?.count, req.body?.orderDate);

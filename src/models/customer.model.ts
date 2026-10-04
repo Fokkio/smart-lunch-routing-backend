@@ -14,6 +14,8 @@ export type Customer = {
 export type CustomerWithDistance = Customer & { distanceKm: number };
 export type CustomerInput = {
   name: string;
+  first_name?: string;
+  last_name?: string;
   phone: string;
   address?: string | null;
   lat: number;
