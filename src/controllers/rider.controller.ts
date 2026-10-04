@@ -35,4 +35,17 @@ export class RiderController {
       next(err);
     }
   }
+
+  static async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const deleted = await RiderService.delete(req.params['id'] as string);
+      if (!deleted) {
+        res.status(404).json({ message: 'Rider not found' });
+        return;
+      }
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  }
 }

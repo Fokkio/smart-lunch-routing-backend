@@ -47,4 +47,24 @@ export class RiderService {
       handleRiderWriteError(error);
     }
   }
+
+  static async delete(id: string): Promise<boolean> {
+    try {
+      return await RiderModel.delete(id);
+    } catch (error) {
+      // ฐานข้อมูลปฏิเสธการลบ เพราะไรเดอร์ถูกอ้างอิงโดยข้อมูลการจัดส่ง
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: unknown }).code === 'ER_ROW_IS_REFERENCED_2'
+      ) {
+        throw Object.assign(
+          new Error('Cannot delete rider that is referenced by delivery records'),
+          { statusCode: 409 },
+        );
+      }
+      throw error;
+    }
+  }
 }
