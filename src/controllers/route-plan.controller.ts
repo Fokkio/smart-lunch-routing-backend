@@ -78,23 +78,6 @@ export class RoutePlanController {
     }
   }
 
-  static async deliverStop(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const ids = [req.params['id'], req.params['jobId'], req.params['orderId']].map(Number);
-      if (ids.some((id) => !Number.isSafeInteger(id) || id < 1)) {
-        res.status(400).json({ message: 'Plan, job and order IDs must be positive integers' });
-        return;
-      }
-      const delivered = await RoutePlanningService.deliverStop(ids[0]!, ids[1]!, ids[2]!);
-      if (!delivered) {
-        res.status(404).json({ message: 'Stop not found in this job' });
-        return;
-      }
-      res.json({ delivered: true });
-    } catch (error) {
-      next(error);
-    }
-  }
 }
 
 function validatedDate(value: unknown, res: Response): string | null {

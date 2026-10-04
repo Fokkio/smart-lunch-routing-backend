@@ -53,12 +53,12 @@ export type StopRow = RowDataPacket & {
  * generate call — never overwritten; plans coexist and the owner picks.
  */
 export class RoutePlanModel {
-  static async deliverStop(planId: number, jobId: number, orderId: number): Promise<boolean> {
+  static async deliverStop(planId: number, jobId: number, orderId: number, riderId?: number): Promise<boolean> {
     return withTransaction(async (conn) => {
       const [rows] = await conn.execute<(RowDataPacket & {
-        status: RoutePlanStatus; delivery_status: string; stop_sequence: number;
+        status: RoutePlanStatus; delivery_status: string; stop_sequence: number; rider_id: number | null;
       })[]>(
-        `SELECT rp.status, o.status AS delivery_status, djo.stop_sequence
+        `SELECT rp.status, o.status AS delivery_status, djo.stop_sequence, dj.rider_id
          FROM route_plans rp JOIN delivery_jobs dj ON dj.route_plan_id=rp.route_plan_id
          JOIN delivery_job_orders djo ON djo.delivery_job_id=dj.delivery_job_id
          JOIN orders o ON o.order_id=djo.order_id
@@ -67,6 +67,7 @@ export class RoutePlanModel {
       );
       const stop = rows[0];
       if (!stop) return false;
+      if (riderId !== undefined && stop.rider_id !== riderId) return false;
       if (stop.status !== 'SELECTED') {
         throw Object.assign(new Error('Only a selected plan can record deliveries'), { statusCode: 409 });
       }
@@ -192,6 +193,28 @@ export class RoutePlanModel {
     return full;
   }
 
+  static async findRiderJobs(riderId: number, planDate: string): Promise<Array<{ planId: number; job: DeliveryRouteResponse }>> {
+    const [rows] = await getPool().execute<Array<JobRow & { approximate: number | boolean }>>(
+      `SELECT dj.*, rp.approximate FROM delivery_jobs dj
+       JOIN route_plans rp ON rp.route_plan_id=dj.route_plan_id
+       WHERE dj.rider_id=? AND rp.plan_date=? AND rp.status='SELECTED'
+       ORDER BY dj.delivery_job_id`, [riderId, planDate],
+    );
+    return Promise.all(rows.map(async (row) => ({
+      planId: row.route_plan_id,
+      job: await this.mapJob(row, 0, Boolean(row.approximate)),
+    })));
+  }
+
+  static async findSelectedRiderJobPlan(riderId: number, jobId: number): Promise<number | null> {
+    const [rows] = await getPool().execute<(RowDataPacket & { route_plan_id: number })[]>(
+      `SELECT rp.route_plan_id FROM delivery_jobs dj
+       JOIN route_plans rp ON rp.route_plan_id=dj.route_plan_id
+       WHERE dj.delivery_job_id=? AND dj.rider_id=? AND rp.status='SELECTED'`, [jobId, riderId],
+    );
+    return rows[0]?.route_plan_id ?? null;
+  }
+
   /**
    * Select a plan: mark SELECTED and move its orders PENDING → PLANNED so
    * the next generate only sees unplanned orders. Transactional.
@@ -217,7 +240,7 @@ export class RoutePlanModel {
         total: number; distinct_riders: number; unavailable: number;
       })[]>(
         `SELECT COUNT(*) AS total, COUNT(DISTINCT dj.rider_id) AS distinct_riders,
-         SUM(dj.rider_id IS NULL OR COALESCE(r.is_available, FALSE)=FALSE) AS unavailable
+         SUM(dj.rider_id IS NULL OR COALESCE(r.is_available, FALSE)=FALSE OR COALESCE(r.status,'INACTIVE')<>'ACTIVE') AS unavailable
          FROM delivery_jobs dj LEFT JOIN riders r ON r.rider_id=dj.rider_id
          WHERE dj.route_plan_id=?`, [routePlanId],
       );
@@ -250,12 +273,22 @@ export class RoutePlanModel {
   }
 
   /** Delete one plan and its jobs/stops; restore pending orders only for a selected plan. */
-  static async deleteById(routePlanId: number): Promise<boolean> {
+  static async deleteById(routePlanId: number, draftOnly = false): Promise<boolean> {
     return withTransaction(async (conn) => {
       const [plans] = await conn.execute<PlanRow[]>(
         'SELECT route_plan_id, status FROM route_plans WHERE route_plan_id = ? FOR UPDATE', [routePlanId]);
       if (!plans[0]) return false;
+      if (draftOnly && plans[0].status === 'SELECTED') return false;
       if (plans[0].status === 'SELECTED') {
+        const [delivered] = await conn.execute<(RowDataPacket & { count: number })[]>(
+          `SELECT COUNT(*) AS count FROM delivery_job_orders djo
+           JOIN delivery_jobs dj ON dj.delivery_job_id=djo.delivery_job_id
+           JOIN orders o ON o.order_id=djo.order_id
+           WHERE dj.route_plan_id=? AND o.status='DELIVERED'`, [routePlanId],
+        );
+        if (Number(delivered[0]?.count ?? 0) > 0) {
+          throw Object.assign(new Error('A plan with completed deliveries cannot be deleted'), { statusCode: 409 });
+        }
         await conn.execute(
           `UPDATE orders SET status = 'PENDING' WHERE status = 'PLANNED' AND order_id IN
            (SELECT order_id FROM delivery_job_orders WHERE delivery_job_id IN

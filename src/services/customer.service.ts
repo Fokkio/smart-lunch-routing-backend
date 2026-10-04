@@ -142,12 +142,15 @@ export class CustomerService {
     // check input first
     validate(input);
 
+    const name = (input.name?.trim() || `${input.first_name ?? ''} ${input.last_name ?? ''}`).trim();
+    const effectiveInput = { ...input, name };
+
     // การสร้างลูกค้าใหม่ต้องส่งข้อมูลจำเป็นให้ครบ
     if (
-      !input.name?.trim() ||
-      !input.phone?.trim() ||
-      input.lat === undefined ||
-      input.lng === undefined
+      !effectiveInput.name ||
+      !effectiveInput.phone?.trim() ||
+      effectiveInput.lat === undefined ||
+      effectiveInput.lng === undefined
     ) {
       throw Object.assign(new Error("name, phone, lat and lng are required"), {
         statusCode: 400,
@@ -155,8 +158,8 @@ export class CustomerService {
     }
     try {
       return await CustomerModel.create({
-        ...input,
-        phone: normalizePhone(input.phone),
+        ...effectiveInput,
+        phone: normalizePhone(effectiveInput.phone),
       });
     } catch (error) {
       handleCustomerWriteError(error);
@@ -170,11 +173,14 @@ export class CustomerService {
     validateCustomerId(id);
     validate(input);
 
+    const name = input.name?.trim() || [input.first_name, input.last_name].filter(Boolean).join(' ').trim() || input.name;
+    const effectiveInput = name !== undefined ? { ...input, name } : input;
+
     // ถ้าแก้เฉพาะชื่อโดยไม่ส่งเบอร์มา ให้คงเบอร์เดิมไว้
     const normalizedInput =
-      input.phone === undefined
-        ? input
-        : { ...input, phone: normalizePhone(input.phone) };
+      effectiveInput.phone === undefined
+        ? effectiveInput
+        : { ...effectiveInput, phone: normalizePhone(effectiveInput.phone) };
 
     try {
       return await CustomerModel.update(id, normalizedInput);

@@ -9,6 +9,9 @@ import { orderRoutes } from "./routes/order.routes";
 import { riderRoutes } from "./routes/rider.routes";
 import { routePlanRoutes } from "./routes/route-plan.routes";
 import { settingsRoutes } from "./routes/settings.routes";
+import { authRoutes } from "./routes/auth.routes";
+import { riderJobRoutes } from "./routes/rider-job.routes";
+import { requireAuth, requireOwner, requireRider } from "./middleware/auth";
 
 export function createApp(): express.Express {
   const app = express();
@@ -47,11 +50,13 @@ export function createApp(): express.Express {
   });
 
   // API routes
-  app.use("/api/customers", customerRoutes);
-  app.use("/api/orders", orderRoutes);
-  app.use("/api/riders", riderRoutes);
-  app.use("/api/route-plans", routePlanRoutes);
-  app.use("/api/settings", settingsRoutes);
+  app.use('/api/auth', authRoutes);
+  app.use('/api/my-jobs', requireAuth, requireRider, riderJobRoutes);
+  app.use("/api/customers", requireAuth, requireOwner, customerRoutes);
+  app.use("/api/orders", requireAuth, requireOwner, orderRoutes);
+  app.use("/api/riders", requireAuth, requireOwner, riderRoutes);
+  app.use("/api/route-plans", requireAuth, requireOwner, routePlanRoutes);
+  app.use("/api/settings", requireAuth, requireOwner, settingsRoutes);
 
   app.use((_req, res) => {
     res.status(404).json({ message: 'Route not found' });

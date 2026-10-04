@@ -151,10 +151,6 @@ export class RoutePlanningService {
     return RoutePlanModel.select(id);
   }
 
-  static deliverStop(planId: number, jobId: number, orderId: number): Promise<boolean> {
-    return RoutePlanModel.deliverStop(planId, jobId, orderId);
-  }
-
   static delete(id: number): Promise<boolean> {
     return RoutePlanModel.deleteById(id);
   }
