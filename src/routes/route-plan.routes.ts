@@ -8,4 +8,5 @@ routePlanRoutes.post('/recalculate', RoutePlanController.recalculate);
 routePlanRoutes.get('/', RoutePlanController.list);
 routePlanRoutes.get('/:id', RoutePlanController.get);
 routePlanRoutes.post('/:id/select', RoutePlanController.select);
+routePlanRoutes.post('/:id/jobs/:jobId/stops/:orderId/deliver', RoutePlanController.deliverStop);
 routePlanRoutes.delete('/:id', RoutePlanController.delete);

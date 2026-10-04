@@ -24,6 +24,7 @@ export interface RouteStopResponse {
   distanceFromPreviousKm: number;
   travelTimeFromPreviousMin: number;
   estimatedArrivalTime: string;
+  deliveryStatus: 'WAITING' | 'DELIVERING' | 'DELIVERED';
 }
 
 export interface DeliveryRouteResponse {

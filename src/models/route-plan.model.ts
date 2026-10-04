@@ -43,6 +43,7 @@ export type StopRow = RowDataPacket & {
   customer_id: number; box_count: number; customer_name: string;
   customer_phone: string | null; customer_address: string | null;
   customer_latitude: number; customer_longitude: number;
+  delivery_status: 'WAITING' | 'DELIVERING' | 'DELIVERED';
 };
 
 /**
@@ -51,6 +52,49 @@ export type StopRow = RowDataPacket & {
  * generate call — never overwritten; plans coexist and the owner picks.
  */
 export class RoutePlanModel {
+  static async deliverStop(planId: number, jobId: number, orderId: number): Promise<boolean> {
+    return withTransaction(async (conn) => {
+      const [rows] = await conn.execute<(RowDataPacket & {
+        status: RoutePlanStatus; delivery_status: string; stop_sequence: number;
+      })[]>(
+        `SELECT rp.status, djo.delivery_status, djo.stop_sequence
+         FROM route_plans rp JOIN delivery_jobs dj ON dj.route_plan_id=rp.route_plan_id
+         JOIN delivery_job_orders djo ON djo.delivery_job_id=dj.delivery_job_id
+         WHERE rp.route_plan_id=? AND dj.delivery_job_id=? AND djo.order_id=? FOR UPDATE`,
+        [planId, jobId, orderId],
+      );
+      const stop = rows[0];
+      if (!stop) return false;
+      if (stop.status !== 'SELECTED') {
+        throw Object.assign(new Error('Only a selected plan can record deliveries'), { statusCode: 409 });
+      }
+      if (stop.delivery_status === 'DELIVERED') return true;
+      const [earlier] = await conn.execute<(RowDataPacket & { count: number })[]>(
+        `SELECT COUNT(*) AS count FROM delivery_job_orders
+         WHERE delivery_job_id=? AND stop_sequence<? AND delivery_status<>'DELIVERED'`,
+        [jobId, stop.stop_sequence],
+      );
+      if (Number(earlier[0]?.count ?? 0) > 0) {
+        throw Object.assign(new Error('Deliver earlier stops first'), { statusCode: 409 });
+      }
+      await conn.execute(
+        `UPDATE delivery_job_orders SET delivery_status='DELIVERED', actual_arrival_time=NOW()
+         WHERE delivery_job_id=? AND order_id=?`,
+        [jobId, orderId],
+      );
+      await conn.execute(`UPDATE orders SET status='DELIVERED' WHERE order_id=?`, [orderId]);
+      const [remaining] = await conn.execute<(RowDataPacket & { count: number })[]>(
+        `SELECT COUNT(*) AS count FROM delivery_job_orders
+         WHERE delivery_job_id=? AND delivery_status<>'DELIVERED'`, [jobId],
+      );
+      await conn.execute(
+        `UPDATE delivery_jobs SET status=? WHERE delivery_job_id=?`,
+        [Number(remaining[0]?.count ?? 0) === 0 ? 'COMPLETED' : 'DELIVERING', jobId],
+      );
+      return true;
+    });
+  }
+
   /** Persist an assembled plan with all jobs/stops in one transaction. */
   static async create(plan: RoutePlanResponse, startTime: string): Promise<number> {
     return withTransaction(async (conn) => {
@@ -169,6 +213,18 @@ export class RoutePlanModel {
         'SELECT * FROM route_plans WHERE route_plan_id = ? FOR UPDATE', [routePlanId]);
       const plan = plans[0];
       if (!plan || plan.status !== 'GENERATED') return false;
+      const [assignment] = await conn.execute<(RowDataPacket & {
+        total: number; distinct_riders: number; unavailable: number;
+      })[]>(
+        `SELECT COUNT(*) AS total, COUNT(DISTINCT dj.rider_id) AS distinct_riders,
+         SUM(dj.rider_id IS NULL OR COALESCE(r.is_available, FALSE)=FALSE) AS unavailable
+         FROM delivery_jobs dj LEFT JOIN riders r ON r.rider_id=dj.rider_id
+         WHERE dj.route_plan_id=?`, [routePlanId],
+      );
+      const jobs = assignment[0];
+      if (!jobs || Number(jobs.total) === 0 || Number(jobs.total) !== Number(jobs.distinct_riders) || Number(jobs.unavailable) > 0) {
+        throw Object.assign(new Error('Every job needs a distinct available rider before selecting this plan'), { statusCode: 422 });
+      }
       // Lock the date's plan set and refuse a second SELECTED plan for it.
       const [sameDay] = await conn.execute<DayRow[]>(
         'SELECT route_plan_id, status FROM route_plans WHERE plan_date = ? FOR UPDATE',
@@ -193,22 +249,25 @@ export class RoutePlanModel {
     return this.findFull(routePlanId);
   }
 
-  /**
-   * ลบใบงานพร้อมงานย่อย (delivery_jobs / delivery_job_orders ลบตามแบบ cascade)
-   * ถ้าใบงานเคยถูกยืนยัน ออเดอร์ที่ยังค้างอยู่ในสถานะ PLANNED จะถูกคืนเป็น
-   * PENDING เพื่อให้ลบหรือจัดงานใหม่ได้ — คืน true ถ้าลบสำเร็จ
-   */
+  /** Delete one plan and its jobs/stops; restore pending orders only for a selected plan. */
   static async deleteById(routePlanId: number): Promise<boolean> {
     return withTransaction(async (conn) => {
       const [plans] = await conn.execute<PlanRow[]>(
-        'SELECT route_plan_id FROM route_plans WHERE route_plan_id = ? FOR UPDATE', [routePlanId]);
+        'SELECT route_plan_id, status FROM route_plans WHERE route_plan_id = ? FOR UPDATE', [routePlanId]);
       if (!plans[0]) return false;
+      if (plans[0].status === 'SELECTED') {
+        await conn.execute(
+          `UPDATE orders SET status = 'PENDING' WHERE status = 'PLANNED' AND order_id IN
+           (SELECT order_id FROM delivery_job_orders WHERE delivery_job_id IN
+            (SELECT delivery_job_id FROM delivery_jobs WHERE route_plan_id = ?))`,
+          [routePlanId],
+        );
+      }
       await conn.execute(
-        `UPDATE orders SET status = 'PENDING' WHERE status = 'PLANNED' AND order_id IN
-         (SELECT order_id FROM delivery_job_orders WHERE delivery_job_id IN
-          (SELECT delivery_job_id FROM delivery_jobs WHERE route_plan_id = ?))`,
-        [routePlanId],
+        `DELETE djo FROM delivery_job_orders djo JOIN delivery_jobs dj
+         ON dj.delivery_job_id=djo.delivery_job_id WHERE dj.route_plan_id=?`, [routePlanId],
       );
+      await conn.execute('DELETE FROM delivery_jobs WHERE route_plan_id = ?', [routePlanId]);
       await conn.execute('DELETE FROM route_plans WHERE route_plan_id = ?', [routePlanId]);
       return true;
     });
@@ -225,7 +284,7 @@ export class RoutePlanModel {
 }
 
 const STOP_QUERY = `SELECT jbo.order_id, jbo.stop_sequence, jbo.distance_from_previous_km,
-        jbo.travel_time_from_previous_min, jbo.estimated_arrival_time,
+        jbo.travel_time_from_previous_min, jbo.estimated_arrival_time, jbo.delivery_status,
         o.customer_id, o.box_count, c.name AS customer_name, c.phone AS customer_phone,
         c.address AS customer_address, c.latitude AS customer_latitude,
         c.longitude AS customer_longitude
@@ -294,6 +353,7 @@ export function toJobResponse(
         distanceFromPreviousKm: Number(s.distance_from_previous_km ?? 0),
         travelTimeFromPreviousMin: Number(s.travel_time_from_previous_min ?? 0),
         estimatedArrivalTime: hhmm(s.estimated_arrival_time),
+        deliveryStatus: s.delivery_status,
       })),
     };
 }

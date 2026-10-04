@@ -167,6 +167,8 @@ CREATE TABLE IF NOT EXISTS delivery_job_orders (
   distance_from_previous_km DECIMAL(10,2) NULL,
   travel_time_from_previous_min INT UNSIGNED NULL,
   estimated_arrival_time TIME NULL,
+  actual_arrival_time TIME NULL,
+  delivery_status ENUM('WAITING','DELIVERING','DELIVERED') NOT NULL DEFAULT 'WAITING',
   arrived_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

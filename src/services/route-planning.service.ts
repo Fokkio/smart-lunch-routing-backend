@@ -55,6 +55,13 @@ export class RoutePlanningService {
       };
     });
 
+    const maxOrders = settings.maxOrdersPerRider;
+    const riders = await RiderModel.findAvailable();
+    const minimumRiders = minimumRiderCount(detailed.length, maxOrders);
+    if (riders.length < minimumRiders) {
+      throw new InfeasiblePlanError(`Need at least ${minimumRiders} available riders for ${detailed.length} orders; found ${riders.length}`);
+    }
+
     const points: MatrixPoint[] = [
       { id: 'SHOP', coordinate: shop },
       ...detailed.map((o) => ({ id: String(o.orderId), coordinate: { latitude: o.latitude, longitude: o.longitude } })),
@@ -68,12 +75,11 @@ export class RoutePlanningService {
     const clusterInput: ClusterOrder[] = detailed.map((o) => ({
       id: String(o.orderId), coordinate: { latitude: o.latitude, longitude: o.longitude },
     }));
-    const maxOrders = settings.maxOrdersPerRider;
     const startSeconds = timeToSeconds(settings.deliveryStartTime);
     const deadlineSeconds = timeToSeconds(settings.deliveryDeadline);
 
     let attempt: { clusters: string[][]; durations: number[] } | null = null;
-    for (let count = minimumRiderCount(detailed.length, maxOrders); count <= detailed.length; count++) {
+    for (let count = minimumRiders; count <= Math.min(detailed.length, riders.length); count++) {
       const clusters = clusterOrders(clusterInput, shop, count, {
         maxOrdersPerRider: maxOrders, seedOffset: options.seedOffset ?? 0,
       });
@@ -86,7 +92,7 @@ export class RoutePlanningService {
       }
     }
     if (!attempt) {
-      throw new InfeasiblePlanError(`No feasible plan for ${planDate}: deadline missed even at ${detailed.length} rider(s)`);
+      throw new InfeasiblePlanError(`No feasible plan for ${planDate}: deadline missed with ${riders.length} available rider(s)`);
     }
 
     const routeProvider = new OsrmRouteProvider(osrm);
@@ -98,11 +104,10 @@ export class RoutePlanningService {
       }),
     );
 
-    const riders = await RiderModel.findAvailable();
     const jobs: AssembleJob[] = attempt.clusters.map((ids, i) => ({
       // sequenceStops already chose the optimal order; reuse it (no recompute drift).
       orderIds: sequenceStops('SHOP', ids, matrix).orderIds.map(Number),
-      riderId: riders.length > 0 ? riders[i % riders.length]!.id : null,
+      riderId: riders[i]!.id,
       geometry: geometries[i] ?? null,
     }));
 
@@ -145,6 +150,10 @@ export class RoutePlanningService {
 
   static select(id: number): Promise<RoutePlanResponse | null> {
     return RoutePlanModel.select(id);
+  }
+
+  static deliverStop(planId: number, jobId: number, orderId: number): Promise<boolean> {
+    return RoutePlanModel.deliverStop(planId, jobId, orderId);
   }
 
   static delete(id: number): Promise<boolean> {

@@ -53,8 +53,19 @@ export class OrderService {
     return OrderModel.createSimulated(count, orderDate);
   }
 
-  static deleteSimulated(): Promise<number> {
-    return OrderModel.deleteSimulated();
+  static async deleteSimulated(): Promise<number> {
+    try {
+      return await OrderModel.deleteSimulated();
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'code' in error &&
+          (error as { code?: unknown }).code === 'ER_ROW_IS_REFERENCED_2') {
+        throw Object.assign(
+          new Error('Simulated orders are in route plans. Delete those plans before clearing simulated orders.'),
+          { statusCode: 409 },
+        );
+      }
+      throw error;
+    }
   }
 
   static update(id: string, input: Partial<OrderInput>): Promise<Order | null> {

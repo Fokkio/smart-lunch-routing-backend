@@ -226,6 +226,7 @@ function buildStops(
       // totals and deadline checks always use the exact fractional values.
       travelTimeFromPreviousMin: Math.round(legMin),
       estimatedArrivalTime: secondsToHHMM(finishSeconds(startSeconds, elapsedMinutes)),
+      deliveryStatus: 'WAITING',
     };
   });
 }

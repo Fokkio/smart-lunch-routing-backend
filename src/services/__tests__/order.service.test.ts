@@ -8,6 +8,7 @@ vi.mock("../../models/order.model", () => ({
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    deleteSimulated: vi.fn(),
     findById: vi.fn(),
   },
 }));
@@ -73,5 +74,14 @@ describe("Order delete conflict", () => {
     await expect(OrderService.delete("1")).rejects.toMatchObject({
       statusCode: 409,
     });
+  });
+});
+
+describe("Simulated order clear conflict", () => {
+  it("returns 409 when a route plan still references simulated orders", async () => {
+    vi.mocked(OrderModel.deleteSimulated).mockRejectedValueOnce(
+      Object.assign(new Error('foreign key'), { code: 'ER_ROW_IS_REFERENCED_2' }),
+    );
+    await expect(OrderService.deleteSimulated()).rejects.toMatchObject({ statusCode: 409 });
   });
 });
