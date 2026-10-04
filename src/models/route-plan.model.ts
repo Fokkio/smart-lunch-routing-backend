@@ -57,9 +57,10 @@ export class RoutePlanModel {
       const [rows] = await conn.execute<(RowDataPacket & {
         status: RoutePlanStatus; delivery_status: string; stop_sequence: number;
       })[]>(
-        `SELECT rp.status, djo.delivery_status, djo.stop_sequence
+        `SELECT rp.status, o.status AS delivery_status, djo.stop_sequence
          FROM route_plans rp JOIN delivery_jobs dj ON dj.route_plan_id=rp.route_plan_id
          JOIN delivery_job_orders djo ON djo.delivery_job_id=dj.delivery_job_id
+         JOIN orders o ON o.order_id=djo.order_id
          WHERE rp.route_plan_id=? AND dj.delivery_job_id=? AND djo.order_id=? FOR UPDATE`,
         [planId, jobId, orderId],
       );
@@ -70,22 +71,19 @@ export class RoutePlanModel {
       }
       if (stop.delivery_status === 'DELIVERED') return true;
       const [earlier] = await conn.execute<(RowDataPacket & { count: number })[]>(
-        `SELECT COUNT(*) AS count FROM delivery_job_orders
-         WHERE delivery_job_id=? AND stop_sequence<? AND delivery_status<>'DELIVERED'`,
+        `SELECT COUNT(*) AS count FROM delivery_job_orders djo
+         JOIN orders o ON o.order_id=djo.order_id
+         WHERE djo.delivery_job_id=? AND djo.stop_sequence<? AND o.status<>'DELIVERED'`,
         [jobId, stop.stop_sequence],
       );
       if (Number(earlier[0]?.count ?? 0) > 0) {
         throw Object.assign(new Error('Deliver earlier stops first'), { statusCode: 409 });
       }
-      await conn.execute(
-        `UPDATE delivery_job_orders SET delivery_status='DELIVERED', actual_arrival_time=NOW()
-         WHERE delivery_job_id=? AND order_id=?`,
-        [jobId, orderId],
-      );
       await conn.execute(`UPDATE orders SET status='DELIVERED' WHERE order_id=?`, [orderId]);
       const [remaining] = await conn.execute<(RowDataPacket & { count: number })[]>(
-        `SELECT COUNT(*) AS count FROM delivery_job_orders
-         WHERE delivery_job_id=? AND delivery_status<>'DELIVERED'`, [jobId],
+        `SELECT COUNT(*) AS count FROM delivery_job_orders djo
+         JOIN orders o ON o.order_id=djo.order_id
+         WHERE djo.delivery_job_id=? AND o.status<>'DELIVERED'`, [jobId],
       );
       await conn.execute(
         `UPDATE delivery_jobs SET status=? WHERE delivery_job_id=?`,
@@ -284,7 +282,9 @@ export class RoutePlanModel {
 }
 
 const STOP_QUERY = `SELECT jbo.order_id, jbo.stop_sequence, jbo.distance_from_previous_km,
-        jbo.travel_time_from_previous_min, jbo.estimated_arrival_time, jbo.delivery_status,
+        jbo.travel_time_from_previous_min, jbo.estimated_arrival_time,
+        CASE WHEN o.status='DELIVERED' THEN 'DELIVERED'
+             WHEN o.status='DELIVERING' THEN 'DELIVERING' ELSE 'WAITING' END AS delivery_status,
         o.customer_id, o.box_count, c.name AS customer_name, c.phone AS customer_phone,
         c.address AS customer_address, c.latitude AS customer_latitude,
         c.longitude AS customer_longitude

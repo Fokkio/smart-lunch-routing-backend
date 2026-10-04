@@ -77,7 +77,7 @@ export class OrderService {
     try {
       return await OrderModel.delete(id);
     } catch (error) {
-      // ฐานข้อมูลปฏิเสธการลบ เพราะออเดอร์อยู่ในใบงานที่ยืนยันแล้ว
+      // ฐานข้อมูลปฏิเสธการลบเมื่อออเดอร์อยู่ในแผนใด ๆ รวมถึงแผนฉบับร่าง
       if (
         typeof error === 'object' &&
         error !== null &&
@@ -85,7 +85,7 @@ export class OrderService {
         (error as { code?: unknown }).code === 'ER_ROW_IS_REFERENCED_2'
       ) {
         throw Object.assign(
-          new Error('Cannot delete order that is part of a confirmed delivery plan'),
+          new Error('Cannot delete order that is part of a delivery plan'),
           { statusCode: 409 },
         );
       }

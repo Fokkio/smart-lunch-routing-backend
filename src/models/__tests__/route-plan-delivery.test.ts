@@ -29,13 +29,11 @@ describe('RoutePlanModel.deliverStop', () => {
     execute.mockResolvedValueOnce([[{ status: 'SELECTED', delivery_status: 'WAITING', stop_sequence: 1 }]])
       .mockResolvedValueOnce([[{ count: 0 }]])
       .mockResolvedValueOnce([{}])
-      .mockResolvedValueOnce([{}])
       .mockResolvedValueOnce([[{ count: 0 }]])
       .mockResolvedValueOnce([{}]);
     await expect(RoutePlanModel.deliverStop(1, 2, 3)).resolves.toBe(true);
-    expect(execute.mock.calls[2]![0]).toContain("delivery_status='DELIVERED'");
-    expect(execute.mock.calls[3]![0]).toContain("status='DELIVERED'");
-    expect(execute.mock.calls[5]![1]).toEqual(['COMPLETED', 2]);
+    expect(execute.mock.calls[2]![0]).toContain("status='DELIVERED'");
+    expect(execute.mock.calls[4]![1]).toEqual(['COMPLETED', 2]);
   });
 });
 
