@@ -1,6 +1,24 @@
 import { RiderModel, type Rider, type RiderInput } from '../models/rider.model';
 
 /** Rider application workflow. CRUD + availability lookup. */
+
+// แปลงข้อผิดพลาดเบอร์ซ้ำจากฐานข้อมูลเป็น HTTP 409 (แบบเดียวกับลูกค้า)
+function handleRiderWriteError(error: unknown): never {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'ER_DUP_ENTRY'
+  ) {
+    throw Object.assign(
+      new Error('Phone number is already used by another rider'),
+      { statusCode: 409 },
+    );
+  }
+
+  throw error;
+}
+
 export class RiderService {
   static findAll(): Promise<Rider[]> {
     return RiderModel.findAll();
@@ -14,11 +32,19 @@ export class RiderService {
     return RiderModel.findAvailable();
   }
 
-  static create(input: RiderInput): Promise<Rider> {
-    return RiderModel.create(input);
+  static async create(input: RiderInput): Promise<Rider> {
+    try {
+      return await RiderModel.create(input);
+    } catch (error) {
+      handleRiderWriteError(error);
+    }
   }
 
-  static update(id: string, input: Partial<RiderInput>): Promise<Rider | null> {
-    return RiderModel.update(id, input);
+  static async update(id: string, input: Partial<RiderInput>): Promise<Rider | null> {
+    try {
+      return await RiderModel.update(id, input);
+    } catch (error) {
+      handleRiderWriteError(error);
+    }
   }
 }

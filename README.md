@@ -167,6 +167,7 @@ because it already contains `orders.is_simulated`.
 npm.cmd run db:migrate
 npm.cmd run db:migrate:routing
 npm.cmd run db:migrate:simulation
+npm.cmd run db:migrate:cost-formula
 npm.cmd run db:init-settings
 ```
 
@@ -202,8 +203,8 @@ npx.cmd vercel --prod
 
 - Order: 1–3 boxes. Rider: at most 3 ORDERS (no box-capacity rule).
 - Start 11:30, deadline 12:30, fallback speed 30 km/h (all from `shop_settings`).
-- Revenue = boxes × 65, food = boxes × 40, rider delivery = 15 + 4 × routeKm,
-  profit = revenue − food − delivery.
+- Revenue = boxes × 65, food = boxes × 40, rider delivery per job
+  = 15 + 2 × routeKm × boxes in job, profit = revenue − food − delivery.
 - Haversine = approximate straight-line fallback; OSRM = preferred road source
   (Leaflet + OpenStreetMap render the map; no Google APIs).
 
@@ -214,7 +215,7 @@ npx.cmd vercel --prod
 - Grouping limit of 3 orders/rider preserved as `MAX_ORDERS_PER_RIDER`
   (orders only — no box-capacity rule exists).
 - Cost/deadline values sourced from `shop_settings`
-  (65/40 THB, 15 + 4×km, 11:30→12:30, 30 km/h).
+  (65/40 THB, 15 + 2×km×boxes, 11:30→12:30, 30 km/h).
 
 ## Open TODOs
 

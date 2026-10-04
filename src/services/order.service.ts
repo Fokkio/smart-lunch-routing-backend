@@ -40,6 +40,11 @@ export class OrderService {
     if (!Number.isInteger(input.customerId) || input.customerId < 1) {
       throw Object.assign(new Error('customerId must be a positive integer'), { statusCode: 400 });
     }
+    if (!Number.isInteger(input.boxes) || (input.boxes as number) < 1 || (input.boxes as number) > 3) {
+      throw Object.assign(new Error('boxes is required and must be an integer between 1 and 3'), {
+        statusCode: 400,
+      });
+    }
     validate(input);
     return OrderModel.create(normalizeStatus(input));
   }
@@ -57,8 +62,25 @@ export class OrderService {
     return OrderModel.update(id, normalizeStatus(input));
   }
 
-  static delete(id: string): Promise<boolean> {
-    return OrderModel.delete(id);
+  static async delete(id: string): Promise<boolean> {
+    try {
+      return await OrderModel.delete(id);
+    } catch (error) {
+      // ฐานข้อมูลปฏิเสธการลบ เพราะออเดอร์อยู่ในใบงานที่ยืนยันแล้ว
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: unknown }).code === 'ER_ROW_IS_REFERENCED_2'
+      ) {
+        throw Object.assign(
+          new Error('Cannot delete order that is part of a confirmed delivery plan'),
+          { statusCode: 409 },
+        );
+      }
+
+      throw error;
+    }
   }
 }
 

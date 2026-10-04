@@ -32,7 +32,7 @@ const DEFAULT_SHOP_SETTINGS: DefaultShopSettings = {
   boxSalePrice: 65,
   boxFoodCost: 40,
   riderBaseCost: 15,
-  riderCostPerKm: 4,
+  riderCostPerKm: 2,
 };
 
 async function main(): Promise<void> {

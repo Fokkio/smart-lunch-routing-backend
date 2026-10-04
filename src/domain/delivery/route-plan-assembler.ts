@@ -98,7 +98,10 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
   const totalBoxes = input.orders.reduce((sum, o) => sum + o.boxCount, 0);
   const costs = calculateCosts(
     totalBoxes,
-    jobs.map((j) => exactJobDistance(input.matrix, indexOf, shopIndex, input.jobs[j.riderIndex]!.orderIds)),
+    jobs.map((j) => ({
+      distanceKm: exactJobDistance(input.matrix, indexOf, shopIndex, input.jobs[j.riderIndex]!.orderIds),
+      boxes: j.totalBoxes,
+    })),
     input.settings,
   );
   jobs.forEach((job, i) => {
