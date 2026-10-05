@@ -190,6 +190,29 @@ with `\\n`) or `DB_SSL_CA_PATH` for a local certificate file.
 
 ## Deploy to Vercel
 
+### Review fixes: database migration
+
+The revised backend requires `route_plans.input_snapshot`. Before starting it
+against an existing database, back up the database, pause application writes,
+verify the target `DB_*` environment, and run the earlier migrations above first:
+
+```powershell
+npm.cmd run db:migrate:review
+```
+
+This command adds plan input snapshots, unique customer/rider phone constraints,
+and prevents deleting riders referenced by jobs. Duplicate phone numbers stop
+the command before schema changes; resolve duplicates explicitly without losing
+customer history. DDL is not atomic: if a later step fails, fix the cause and
+rerun the command, which checks existing columns, indexes, and constraints.
+
+Legacy selected plans receive a baseline of currently stored customer and shop
+data. Original historical inputs cannot be reconstructed; this baseline does
+not prove that old geometry matches those inputs. Legacy generated drafts are
+rejected and must be recalculated. New plans retain their original inputs and
+are checked again before selection. Unit tests mock the database; this migration
+still needs verification against a disposable MySQL/TiDB database before production.
+
 No custom `vercel.json` is needed. `src/app.ts` exports the Express app as the
 default export for Vercel, while `src/server.ts` remains the local port
 listener.

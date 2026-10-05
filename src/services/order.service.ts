@@ -7,20 +7,27 @@ import {
   type OrderStatus,
 } from '../models/order.model';
 import { todayLocal } from '../models/dates';
+import { badInput, validateId, validateObject, validDate } from './input-validation';
 
 const ORDER_STATUSES: OrderStatus[] = ['PENDING', 'PLANNED', 'DELIVERING', 'DELIVERED', 'CANCELLED'];
 
 function validate(input: Partial<OrderInput>): void {
+  validateObject(input);
+  if (input.customerId !== undefined && (!Number.isSafeInteger(input.customerId) || input.customerId < 1)) badInput('customerId must be a positive integer');
+  if (input.orderDate !== undefined && !validDate(input.orderDate)) badInput('orderDate must be a valid YYYY-MM-DD date');
   if (input.boxes !== undefined && (!Number.isInteger(input.boxes) || input.boxes < 1 || input.boxes > 3)) {
     throw Object.assign(new Error('boxes must be an integer between 1 and 3'), { statusCode: 400 });
   }
-  if (input.status !== undefined && !ORDER_STATUSES.includes(input.status.toUpperCase() as OrderStatus)) {
+  if (input.status !== undefined && (typeof input.status !== 'string' || !ORDER_STATUSES.includes(input.status.toUpperCase() as OrderStatus))) {
     throw Object.assign(new Error(`status must be one of ${ORDER_STATUSES.join(', ')}`), { statusCode: 400 });
   }
 }
 
 export class OrderService {
   static findAll(filter?: OrderFilter): Promise<Order[]> {
+    if (filter?.date !== undefined && !validDate(filter.date)) badInput('date must be a valid YYYY-MM-DD date');
+    if (filter?.customerId !== undefined) validateId(filter.customerId);
+    if (filter?.status !== undefined && !ORDER_STATUSES.includes(filter.status.toUpperCase() as OrderStatus)) badInput('Invalid order status');
     return OrderModel.findAll(filter);
   }
 
@@ -33,10 +40,12 @@ export class OrderService {
   }
 
   static findById(id: string): Promise<Order | null> {
+    validateId(id);
     return OrderModel.findById(id);
   }
 
   static create(input: OrderInput): Promise<Order> {
+    validate(input);
     if (!Number.isInteger(input.customerId) || input.customerId < 1) {
       throw Object.assign(new Error('customerId must be a positive integer'), { statusCode: 400 });
     }
@@ -45,8 +54,7 @@ export class OrderService {
         statusCode: 400,
       });
     }
-    validate(input);
-    return OrderModel.create(normalizeStatus(input));
+    return OrderModel.create(normalizeStatus(input)).catch(handleOrderWriteError);
   }
 
   static createSimulated(count: number, orderDate = todayLocal()): Promise<Order[]> {
@@ -69,11 +77,13 @@ export class OrderService {
   }
 
   static update(id: string, input: Partial<OrderInput>): Promise<Order | null> {
+    validateId(id);
     validate(input);
-    return OrderModel.update(id, normalizeStatus(input));
+    return OrderModel.update(id, normalizeStatus(input)).catch(handleOrderWriteError);
   }
 
   static async delete(id: string): Promise<boolean> {
+    validateId(id);
     try {
       return await OrderModel.delete(id);
     } catch (error) {
@@ -93,6 +103,13 @@ export class OrderService {
       throw error;
     }
   }
+}
+
+function handleOrderWriteError(error: unknown): never {
+  if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ER_NO_REFERENCED_ROW_2') {
+    badInput('Customer does not exist');
+  }
+  throw error;
 }
 
 function normalizeStatus<T extends Partial<OrderInput>>(input: T): T {

@@ -1,5 +1,6 @@
 import { type ResultSetHeader, type RowDataPacket } from "mysql2/promise";
-import { getPool } from "../database/mysql.connection";
+import { getPool, withTransaction } from "../database/mysql.connection";
+import { guardPlanEdit, lockPlanning } from './plan-inputs';
 
 export type Customer = {
   id: number;
@@ -122,7 +123,10 @@ export class CustomerModel {
     // ส่ง address เป็น null = ล้างที่อยู่
     const addressProvided = input.address !== undefined;
 
-    await getPool().execute(
+    await withTransaction(async conn => {
+      await lockPlanning(conn);
+      await guardPlanEdit(conn, 'o.customer_id=?', [id], false);
+      await conn.execute(
       `UPDATE customers
      SET name = COALESCE(?, name),
          phone = COALESCE(?, phone),
@@ -140,6 +144,7 @@ export class CustomerModel {
         id,
       ],
     );
+    });
 
     return this.findById(id);
   }

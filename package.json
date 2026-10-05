@@ -19,6 +19,7 @@
     "db:migrate:simulation": "tsx scripts/run-sql.ts database/migrations/003_simulated_orders.sql",
     "db:migrate:cost-formula": "tsx scripts/run-sql.ts database/migrations/004_rider_cost_formula.sql",
     "db:migrate:accounts": "tsx scripts/migrate-accounts.ts",
+    "db:migrate:review": "tsx scripts/migrate-review.ts",
     "db:create-owner": "tsx scripts/create-owner.ts",
     "db:prune-drafts": "tsx scripts/prune-draft-plans.ts",
     "db:seed": "tsx scripts/init-shop-settings.ts",

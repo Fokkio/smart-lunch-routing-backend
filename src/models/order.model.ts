@@ -1,6 +1,7 @@
 import { type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
 import { getPool, withTransaction } from '../database/mysql.connection';
 import { toISODate, todayLocal } from './dates';
+import { guardPlanEdit, lockPlanning } from './plan-inputs';
 
 export type OrderStatus = 'PENDING' | 'PLANNED' | 'DELIVERING' | 'DELIVERED' | 'CANCELLED';
 export type Order = {
@@ -140,10 +141,14 @@ export class OrderModel {
   }
 
   static async update(id: string, input: Partial<OrderInput>): Promise<Order | null> {
-    await getPool().execute(
+    await withTransaction(async conn => {
+      await lockPlanning(conn);
+      await guardPlanEdit(conn, 'o.order_id=?', [id]);
+      await conn.execute(
       'UPDATE orders SET customer_id=COALESCE(?,customer_id),order_date=COALESCE(?,order_date),box_count=COALESCE(?,box_count),status=COALESCE(?,status) WHERE order_id=?',
       [input.customerId ?? null, input.orderDate ?? null, input.boxes ?? null, input.status ?? null, id],
     );
+    });
     return this.findById(id);
   }
 

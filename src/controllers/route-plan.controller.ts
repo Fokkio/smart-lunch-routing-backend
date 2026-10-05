@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { RoutePlanningService } from '../services/route-planning.service';
+import { validateId, validDate } from '../services/input-validation';
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** HTTP adapter for RoutePlan generation/listing/selection (no business logic). */
 export class RoutePlanController {
@@ -29,7 +29,7 @@ export class RoutePlanController {
   static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const date = typeof req.query['date'] === 'string' ? req.query['date'] : undefined;
-      if (date && !DATE_PATTERN.test(date)) {
+      if (date && !validDate(date)) {
         res.status(400).json({ message: 'date must be YYYY-MM-DD' });
         return;
       }
@@ -41,6 +41,7 @@ export class RoutePlanController {
 
   static async get(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      validateId(req.params['id']!);
       const plan = await RoutePlanningService.findById(Number(req.params['id']));
       if (!plan) {
         res.status(404).json({ message: 'RoutePlan not found' });
@@ -54,6 +55,7 @@ export class RoutePlanController {
 
   static async select(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      validateId(req.params['id']!);
       const plan = await RoutePlanningService.select(Number(req.params['id']));
       if (!plan) {
         res.status(404).json({ message: 'RoutePlan not found or not selectable' });
@@ -67,6 +69,7 @@ export class RoutePlanController {
 
   static async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      validateId(req.params['id']!);
       const deleted = await RoutePlanningService.delete(Number(req.params['id']));
       if (!deleted) {
         res.status(404).json({ message: 'RoutePlan not found' });
@@ -81,7 +84,7 @@ export class RoutePlanController {
 }
 
 function validatedDate(value: unknown, res: Response): string | null {
-  if (typeof value !== 'string' || !DATE_PATTERN.test(value)) {
+  if (!validDate(value)) {
     res.status(400).json({ message: 'planDate must be YYYY-MM-DD' });
     return null;
   }

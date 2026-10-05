@@ -26,20 +26,20 @@ async function putAccount(body: unknown): Promise<Response> {
 }
 
 it('sets a unique username and bcrypt password and revokes rider sessions', async () => {
-  execute.mockResolvedValueOnce([[{ password_hash: null }]])
+  execute.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ password_hash: null }]])
     .mockResolvedValueOnce([{}]).mockResolvedValueOnce([{}]);
   const response = await putAccount({ username: 'Courier.Seven', password: 'a long test password' });
   expect(response.status).toBe(204);
-  expect(execute.mock.calls[1]![1][0]).toBe('courier.seven');
-  expect(execute.mock.calls[1]![1][1]).toMatch(/^\$2[aby]\$10\$/);
-  expect(execute.mock.calls[2]![0]).toContain('DELETE FROM auth_sessions');
+  expect(execute.mock.calls[2]![1][0]).toBe('courier.seven');
+  expect(execute.mock.calls[2]![1][1]).toMatch(/^\$2[aby]\$10\$/);
+  expect(execute.mock.calls[3]![0]).toContain('DELETE FROM auth_sessions');
 });
 
 it('requires an initial password and rejects a username already in use', async () => {
-  execute.mockResolvedValueOnce([[{ password_hash: null }]]);
+  execute.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ password_hash: null }]]);
   expect((await putAccount({ username: 'courier.seven' })).status).toBe(400);
   server?.close();
-  execute.mockReset().mockResolvedValueOnce([[{ password_hash: 'old-hash' }]])
+  execute.mockReset().mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ password_hash: 'old-hash' }]])
     .mockRejectedValueOnce(Object.assign(new Error('Duplicate'), { code: 'ER_DUP_ENTRY' }));
   expect((await putAccount({ username: 'courier.seven' })).status).toBe(409);
 });

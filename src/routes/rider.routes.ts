@@ -3,6 +3,7 @@ import { RiderController } from '../controllers/rider.controller';
 import { hashPassword, normalizeRiderUsername } from '../middleware/auth';
 import { withTransaction } from '../database/mysql.connection';
 import type { RowDataPacket } from 'mysql2/promise';
+import { lockPlanning } from '../models/plan-inputs';
 
 export const riderRoutes = Router();
 
@@ -18,6 +19,7 @@ riderRoutes.put('/:id/password', async (req, res, next) => {
     }
     const hash = await hashPassword(req.body.password);
     const found = await withTransaction(async conn => {
+      await lockPlanning(conn);
       const [result] = await conn.execute<import('mysql2/promise').ResultSetHeader>(
         'UPDATE riders SET password_hash=?, login_enabled=TRUE WHERE rider_id=?', [hash, id],
       );
@@ -42,6 +44,7 @@ riderRoutes.put('/:id/account', async (req, res, next) => {
     }
     const hash = password === undefined ? null : await hashPassword(password);
     const result = await withTransaction(async conn => {
+      await lockPlanning(conn);
       const [rows] = await conn.execute<(RowDataPacket & { password_hash: string | null })[]>(
         'SELECT password_hash FROM riders WHERE rider_id=? FOR UPDATE', [id],
       );
