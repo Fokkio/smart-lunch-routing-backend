@@ -9,7 +9,7 @@ export class RoutePlanController {
     try {
       const planDate = validatedDate(req.body?.planDate, res);
       if (!planDate) return;
-      res.status(201).json(await RoutePlanningService.generate(planDate));
+      res.status(201).json(await RoutePlanningService.generate(planDate, {startTime:req.body?.startTime,deadline:req.body?.deadline,orderIds:req.body?.orderIds}));
     } catch (error) {
       next(error);
     }
@@ -20,7 +20,7 @@ export class RoutePlanController {
     try {
       const planDate = validatedDate(req.body?.planDate, res);
       if (!planDate) return;
-      res.status(201).json(await RoutePlanningService.generateAlternative(planDate));
+      res.status(201).json(await RoutePlanningService.generateAlternative(planDate, {startTime:req.body?.startTime,deadline:req.body?.deadline,orderIds:req.body?.orderIds}));
     } catch (error) {
       next(error);
     }
@@ -56,7 +56,7 @@ export class RoutePlanController {
   static async select(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       validateId(req.params['id']!);
-      const plan = await RoutePlanningService.select(Number(req.params['id']));
+      const plan = await RoutePlanningService.select(Number(req.params['id']), req.body?.assignments);
       if (!plan) {
         res.status(404).json({ message: 'RoutePlan not found or not selectable' });
         return;

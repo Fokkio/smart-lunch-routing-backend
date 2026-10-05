@@ -11,6 +11,9 @@ import type {
 import { getPool, withTransaction } from '../database/mysql.connection';
 import { toISODate } from './dates';
 import { lockPlanning, readSnapshot, snapshotStop, validateSnapshot, type PlanSnapshot } from './plan-inputs';
+import { busyRiderSql } from './rider.model';
+import { badInput } from '../services/input-validation';
+export type JobAssignment = {jobId:number;riderId:number};
 
 export type PlanRow = RowDataPacket & {
   route_plan_id: number; plan_date: string | Date; start_time: string;
@@ -22,13 +25,13 @@ export type PlanRow = RowDataPacket & {
   input_snapshot?: string | PlanSnapshot | null;
 };
 export type JobRow = RowDataPacket & {
+  acknowledged_at?: string | Date | null; status?:'WAITING'|'DELIVERING'|'COMPLETED';
   delivery_job_id: number; route_plan_id: number; rider_id: number | null;
   job_code: string; total_orders: number; total_boxes: number;
   total_distance_km: number | null; estimated_duration_min: number | null;
   estimated_start_time: string | null; estimated_finish_time: string | null;
   delivery_cost: number | null; route_geometry: string | object | null;
 };
-type DayRow = RowDataPacket & { route_plan_id: number; status: RoutePlanStatus };
 
 /** 409 — a conflicting SELECTED plan already exists for the date. */
 export class PlanConflictError extends Error {
@@ -55,12 +58,28 @@ export type StopRow = RowDataPacket & {
  * generate call — never overwritten; plans coexist and the owner picks.
  */
 export class RoutePlanModel {
+  static async acknowledgeJob(jobId:number,riderId:number,start=false):Promise<boolean> {
+    return withTransaction(async conn=>{
+      await lockPlanning(conn);
+      const [rows]=await conn.execute<JobRow[]>(`SELECT dj.* FROM delivery_jobs dj JOIN route_plans rp ON rp.route_plan_id=dj.route_plan_id
+        WHERE dj.delivery_job_id=? AND dj.rider_id=? AND rp.status='SELECTED' FOR UPDATE`,[jobId,riderId]);
+      const job=rows[0];
+      if(!job)return false;
+      if(job.status==='COMPLETED')throw new PlanConflictError('This job is already completed');
+      if(start && !job.acknowledged_at)throw new PlanConflictError('Acknowledge the job before starting');
+      if(start){
+        await conn.execute("UPDATE delivery_jobs SET status='DELIVERING' WHERE delivery_job_id=?",[jobId]);
+        await conn.execute("UPDATE orders o JOIN delivery_job_orders djo ON djo.order_id=o.order_id SET o.status='DELIVERING' WHERE djo.delivery_job_id=? AND o.status='PLANNED'",[jobId]);
+      }else await conn.execute('UPDATE delivery_jobs SET acknowledged_at=COALESCE(acknowledged_at,UTC_TIMESTAMP()) WHERE delivery_job_id=?',[jobId]);
+      return true;
+    });
+  }
   static async deliverStop(planId: number, jobId: number, orderId: number, riderId?: number): Promise<boolean> {
     return withTransaction(async (conn) => {
       const [rows] = await conn.execute<(RowDataPacket & {
-        status: RoutePlanStatus; delivery_status: string; stop_sequence: number; rider_id: number | null;
+        status: RoutePlanStatus; delivery_status: string; stop_sequence: number; rider_id: number | null;acknowledged_at:string|null;
       })[]>(
-        `SELECT rp.status, o.status AS delivery_status, djo.stop_sequence, dj.rider_id
+        `SELECT rp.status, o.status AS delivery_status, djo.stop_sequence, dj.rider_id,dj.acknowledged_at
          FROM route_plans rp JOIN delivery_jobs dj ON dj.route_plan_id=rp.route_plan_id
          JOIN delivery_job_orders djo ON djo.delivery_job_id=dj.delivery_job_id
          JOIN orders o ON o.order_id=djo.order_id
@@ -74,6 +93,7 @@ export class RoutePlanModel {
         throw Object.assign(new Error('Only a selected plan can record deliveries'), { statusCode: 409 });
       }
       if (stop.delivery_status === 'DELIVERED') return true;
+      if (!stop.acknowledged_at) throw new PlanConflictError('Acknowledge the job before recording deliveries');
       if (!['PLANNED', 'DELIVERING'].includes(stop.delivery_status)) {
         throw Object.assign(new Error('Only assigned orders can be delivered'), { statusCode: 409 });
       }
@@ -106,6 +126,8 @@ export class RoutePlanModel {
       await lockPlanning(conn);
       if (!plan.shop) throw new Error('Plan shop snapshot is required');
       const snapshot: PlanSnapshot = { shop: plan.shop, stops: plan.jobs.flatMap(job => job.stops.map(snapshotStop)) };
+      if(plan.partialBatch)snapshot.scope='BATCH';
+      if (plan.deliveryDeadline) snapshot.window = { startTime:startTime.slice(0,5),deadline:plan.deliveryDeadline };
       await validateSnapshot(conn, snapshot, plan.planDate);
       const [planResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO route_plans(plan_date,start_time,estimated_finish_time,rider_count,
@@ -162,7 +184,7 @@ export class RoutePlanModel {
     const select = `SELECT rp.route_plan_id, rp.plan_date, rp.start_time,
         rp.estimated_finish_time, rp.rider_count, rp.total_distance_km,
         rp.total_delivery_cost, rp.total_revenue, rp.total_food_cost,
-        rp.estimated_profit, rp.status, rp.routing_source, rp.approximate,
+        rp.estimated_profit, rp.status, rp.routing_source, rp.approximate,rp.input_snapshot,
         COALESCE(SUM(dj.total_boxes), 0) AS total_boxes
       FROM route_plans rp LEFT JOIN delivery_jobs dj
         ON dj.route_plan_id = rp.route_plan_id`;
@@ -215,6 +237,7 @@ export class RoutePlanModel {
     return Promise.all(rows.map(async (row) => ({
       planId: row.route_plan_id,
       shop: readSnapshot(row.input_snapshot)?.shop,
+      deliveryDeadline: readSnapshot(row.input_snapshot)?.window?.deadline,
       job: await this.mapJob(row, 0, Boolean(row.approximate), readSnapshot(row.input_snapshot)),
     })));
   }
@@ -232,17 +255,15 @@ export class RoutePlanModel {
    * Select a plan: mark SELECTED and move its orders PENDING → PLANNED so
    * the next generate only sees unplanned orders. Transactional.
    *
-   * Concurrency: the target row AND all same-date plan rows are locked
-   * (`FOR UPDATE`), so two concurrent selects serialize — the loser sees
-   * the winner's SELECTED row and gets `PlanConflictError` instead of
-   * creating a second SELECTED plan for the same date. Residual edge:
-   * a `generate` inserting a brand-new plan mid-select is not blocked;
-   * that is acceptable (generate never marks SELECTED).
+   * Planning writes share the shop lock. Distinct rounds may coexist;
+   * revalidation prevents duplicate orders and riders with unfinished work.
    *
    * @throws {PlanConflictError} (HTTP 409) when another plan for the same
-   * date is already SELECTED.
+   * work is no longer assignable.
    */
-  static async select(routePlanId: number): Promise<RoutePlanResponse | null> {
+  static async select(routePlanId: number, assignments?: JobAssignment[]): Promise<RoutePlanResponse | null> {
+    if (assignments !== undefined && (!Array.isArray(assignments) || !assignments.length || assignments.some(a => !a || !Number.isSafeInteger(a.jobId) || a.jobId < 1 || !Number.isSafeInteger(a.riderId) || a.riderId < 1)
+      || new Set(assignments.map(a=>a.jobId)).size!==assignments.length || new Set(assignments.map(a=>a.riderId)).size!==assignments.length)) badInput('Each job needs one distinct rider');
     const updated = await withTransaction(async (conn) => {
       await lockPlanning(conn);
       // Lock the target row: concurrent selects of the SAME plan serialize here.
@@ -250,12 +271,22 @@ export class RoutePlanModel {
         'SELECT * FROM route_plans WHERE route_plan_id = ? FOR UPDATE', [routePlanId]);
       const plan = plans[0];
       if (!plan || plan.status !== 'GENERATED') return false;
+      if (assignments) {
+        const [jobs] = await conn.execute<JobRow[]>('SELECT delivery_job_id FROM delivery_jobs WHERE route_plan_id=? FOR UPDATE',[routePlanId]);
+        if(jobs.length!==assignments.length || jobs.some(job=>!assignments.some(a=>a.jobId===job.delivery_job_id))) badInput('Assignments must cover every job in this plan');
+        for(const a of assignments) {
+          const [ready]=await conn.execute<RowDataPacket[]>(`SELECT r.rider_id FROM riders r WHERE r.rider_id=? AND is_available=TRUE AND status='ACTIVE'
+           AND login_enabled=TRUE AND username IS NOT NULL AND password_hash IS NOT NULL AND NOT ${busyRiderSql} FOR UPDATE`,[a.riderId]);
+          if(!ready.length)throw new PlanConflictError('The chosen rider is unavailable or already has unfinished work');
+          await conn.execute('UPDATE delivery_jobs SET rider_id=? WHERE delivery_job_id=? AND route_plan_id=?',[a.riderId,a.jobId,routePlanId]);
+        }
+      }
       const [assignment] = await conn.execute<(RowDataPacket & {
         total: number; distinct_riders: number; unavailable: number;
       })[]>(
         `SELECT COUNT(*) AS total, COUNT(DISTINCT dj.rider_id) AS distinct_riders,
          SUM(dj.rider_id IS NULL OR COALESCE(r.is_available, FALSE)=FALSE OR COALESCE(r.status,'INACTIVE')<>'ACTIVE'
-          OR COALESCE(r.login_enabled,FALSE)=FALSE OR r.username IS NULL OR r.password_hash IS NULL) AS unavailable
+          OR COALESCE(r.login_enabled,FALSE)=FALSE OR r.username IS NULL OR r.password_hash IS NULL OR ${busyRiderSql}) AS unavailable
          FROM delivery_jobs dj LEFT JOIN riders r ON r.rider_id=dj.rider_id
          WHERE dj.route_plan_id=?`, [routePlanId],
       );
@@ -263,20 +294,11 @@ export class RoutePlanModel {
       if (!jobs || Number(jobs.total) === 0 || Number(jobs.total) !== Number(jobs.distinct_riders) || Number(jobs.unavailable) > 0) {
         throw Object.assign(new Error('Every job needs a distinct available rider before selecting this plan'), { statusCode: 422 });
       }
-      // Lock the date's plan set and refuse a second SELECTED plan for it.
-      const [sameDay] = await conn.execute<DayRow[]>(
-        'SELECT route_plan_id, status FROM route_plans WHERE plan_date = ? FOR UPDATE',
-        [plan.plan_date],
-      );
-      const rival = sameDay.find((row) => row.status === 'SELECTED');
-      if (rival) {
-        throw new PlanConflictError(
-          `RoutePlan ${rival.route_plan_id} is already SELECTED for ${toISODate(plan.plan_date)}`,
-        );
-      }
+      // Separate rounds may coexist; snapshot checks prevent duplicated orders and busy checks prevent duplicated riders.
       const snapshot = readSnapshot(plan.input_snapshot);
       if (!snapshot) throw new PlanConflictError('This draft has no input snapshot; calculate a new plan');
       await validateSnapshot(conn, snapshot, toISODate(plan.plan_date));
+      await conn.execute('UPDATE delivery_jobs SET assigned_at=UTC_TIMESTAMP() WHERE route_plan_id=?',[routePlanId]);
       await conn.execute('UPDATE route_plans SET status = ? WHERE route_plan_id = ?', ['SELECTED', routePlanId]);
       await conn.execute(
         `UPDATE orders SET status = 'PLANNED' WHERE status = 'PENDING' AND order_id IN
@@ -293,6 +315,7 @@ export class RoutePlanModel {
   /** Delete one plan and its jobs/stops; restore pending orders only for a selected plan. */
   static async deleteById(routePlanId: number, draftOnly = false): Promise<boolean> {
     return withTransaction(async (conn) => {
+      await lockPlanning(conn);
       const [plans] = await conn.execute<PlanRow[]>(
         'SELECT route_plan_id, status FROM route_plans WHERE route_plan_id = ? FOR UPDATE', [routePlanId]);
       if (!plans[0]) return false;
@@ -308,7 +331,7 @@ export class RoutePlanModel {
           throw Object.assign(new Error('A plan with completed deliveries cannot be deleted'), { statusCode: 409 });
         }
         await conn.execute(
-          `UPDATE orders SET status = 'PENDING' WHERE status = 'PLANNED' AND order_id IN
+          `UPDATE orders SET status = 'PENDING' WHERE status IN ('PLANNED','DELIVERING') AND order_id IN
            (SELECT order_id FROM delivery_job_orders WHERE delivery_job_id IN
             (SELECT delivery_job_id FROM delivery_jobs WHERE route_plan_id = ?))`,
           [routePlanId],
@@ -358,6 +381,8 @@ export function toPlanSummary(
   totalBoxes: number,
 ): RoutePlanSummaryResponse {
   return {
+    startTime: hhmm(row.start_time),
+    deliveryDeadline: readSnapshot(row.input_snapshot)?.window?.deadline ?? readSnapshot(row.input_snapshot)?.shop.deliveryDeadline.slice(0,5),
     routePlanId: row.route_plan_id,
     planDate: toISODate(row.plan_date),
     status: row.status,
@@ -383,6 +408,8 @@ export function toJobResponse(
   snapshot: PlanSnapshot | null = null,
 ): DeliveryRouteResponse {
     return {
+      acknowledgedAt: job.acknowledged_at instanceof Date ? job.acknowledged_at.toISOString() : job.acknowledged_at ?? null,
+      status: job.status ?? 'WAITING',
       jobId: job.delivery_job_id,
       jobCode: job.job_code,
       riderIndex,

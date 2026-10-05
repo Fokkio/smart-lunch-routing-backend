@@ -16,10 +16,22 @@ riderJobRoutes.get('/', async (req, res, next) => {
     ]);
     res.json(jobs.map(item => ({ ...item, shop: {
       latitude: Number(item.shop?.latitude ?? settings.latitude), longitude: Number(item.shop?.longitude ?? settings.longitude),
-      deliveryDeadline: (item.shop?.deliveryDeadline ?? settings.deliveryDeadline).slice(0, 5),
+      deliveryDeadline: (item.deliveryDeadline ?? item.shop?.deliveryDeadline ?? settings.deliveryDeadline).slice(0, 5),
     } })));
   } catch (error) { next(error); }
 });
+
+for (const action of ['acknowledge','start'] as const) {
+  riderJobRoutes.post(`/:jobId/${action}`,async(req,res,next)=>{
+    try{
+      const jobId=Number(req.params['jobId']);
+      if(!Number.isSafeInteger(jobId)||jobId<1){res.status(400).json({message:'Invalid job ID'});return;}
+      const changed=await RoutePlanModel.acknowledgeJob(jobId,(res.locals['identity'] as Identity).id,action==='start');
+      if(!changed){res.status(404).json({message:'Job not found'});return;}
+      res.json({[action==='start'?'started':'acknowledged']:true});
+    }catch(error){next(error);}
+  });
+}
 
 riderJobRoutes.post('/:jobId/stops/:orderId/deliver', async (req, res, next) => {
   try {

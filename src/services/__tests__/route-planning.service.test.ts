@@ -99,6 +99,8 @@ describe("RoutePlanningService.generate route geometry", () => {
     await RoutePlanningService.generate('2026-10-04');
 
     expect(fetchRouteGeometrySafe).toHaveBeenCalledWith([shop, near, far], expect.anything());
+    await RoutePlanningService.generate('2026-10-04',{orderIds:[2],startTime:'13:00',deadline:'14:00'});
+    expect(RoutePlanModel.create).toHaveBeenLastCalledWith(expect.objectContaining({partialBatch:true,startTime:'13:00',deliveryDeadline:'14:00',jobs:[expect.objectContaining({totalOrders:1,stops:[expect.objectContaining({orderId:2})]})]}),'13:00');
     expect(RoutePlanModel.create).toHaveBeenCalledWith(
       expect.objectContaining({
         jobs: [expect.objectContaining({ stops: [
