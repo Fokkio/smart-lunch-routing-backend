@@ -120,6 +120,7 @@ export class RoutePlanningService {
       },
     });
 
+    plan.shop = settings;
     const routePlanId = await RoutePlanModel.create(plan, settings.deliveryStartTime);
     const saved = await RoutePlanModel.findFull(routePlanId);
     if (!saved) throw new Error(`RoutePlan ${routePlanId} vanished after persist`);

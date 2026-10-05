@@ -2,21 +2,21 @@ import { Router } from 'express';
 import { RoutePlanModel } from '../models/route-plan.model';
 import type { Identity } from '../middleware/auth';
 import { ShopSettingsModel } from '../models/shop-settings.model';
+import { validDate } from '../services/input-validation';
 
 export const riderJobRoutes = Router();
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 riderJobRoutes.get('/', async (req, res, next) => {
   try {
     const date = req.query['date'];
-    if (typeof date !== 'string' || !DATE.test(date)) { res.status(400).json({ message: 'date must be YYYY-MM-DD' }); return; }
+    if (!validDate(date)) { res.status(400).json({ message: 'date must be YYYY-MM-DD' }); return; }
     const [jobs, settings] = await Promise.all([
       RoutePlanModel.findRiderJobs((res.locals['identity'] as Identity).id, date),
       ShopSettingsModel.get(),
     ]);
     res.json(jobs.map(item => ({ ...item, shop: {
-      latitude: Number(settings.latitude), longitude: Number(settings.longitude),
-      deliveryDeadline: settings.deliveryDeadline.slice(0, 5),
+      latitude: Number(item.shop?.latitude ?? settings.latitude), longitude: Number(item.shop?.longitude ?? settings.longitude),
+      deliveryDeadline: (item.shop?.deliveryDeadline ?? settings.deliveryDeadline).slice(0, 5),
     } })));
   } catch (error) { next(error); }
 });

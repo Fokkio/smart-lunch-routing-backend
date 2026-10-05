@@ -47,6 +47,7 @@ export interface DeliveryRouteResponse {
 }
 
 export interface RoutePlanResponse {
+  shop?: import('../../models/shop-settings.model').ShopSettings;
   routePlanId?: number;
   planDate: string;
   status: RoutePlanStatus;

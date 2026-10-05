@@ -1,4 +1,4 @@
-import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { GeoJsonLineString } from '../domain/routing/distance.types';
 import type {
   DeliveryRouteResponse,
@@ -10,6 +10,7 @@ import type {
 } from '../domain/routing/route-plan.types';
 import { getPool, withTransaction } from '../database/mysql.connection';
 import { toISODate } from './dates';
+import { lockPlanning, readSnapshot, snapshotStop, validateSnapshot, type PlanSnapshot } from './plan-inputs';
 
 export type PlanRow = RowDataPacket & {
   route_plan_id: number; plan_date: string | Date; start_time: string;
@@ -18,6 +19,7 @@ export type PlanRow = RowDataPacket & {
   total_revenue: number | null; total_food_cost: number | null;
   estimated_profit: number | null; status: RoutePlanStatus;
   routing_source: string | null; approximate: number | boolean | null;
+  input_snapshot?: string | PlanSnapshot | null;
 };
 export type JobRow = RowDataPacket & {
   delivery_job_id: number; route_plan_id: number; rider_id: number | null;
@@ -72,6 +74,9 @@ export class RoutePlanModel {
         throw Object.assign(new Error('Only a selected plan can record deliveries'), { statusCode: 409 });
       }
       if (stop.delivery_status === 'DELIVERED') return true;
+      if (!['PLANNED', 'DELIVERING'].includes(stop.delivery_status)) {
+        throw Object.assign(new Error('Only assigned orders can be delivered'), { statusCode: 409 });
+      }
       const [earlier] = await conn.execute<(RowDataPacket & { count: number })[]>(
         `SELECT COUNT(*) AS count FROM delivery_job_orders djo
          JOIN orders o ON o.order_id=djo.order_id
@@ -98,16 +103,21 @@ export class RoutePlanModel {
   /** Persist an assembled plan with all jobs/stops in one transaction. */
   static async create(plan: RoutePlanResponse, startTime: string): Promise<number> {
     return withTransaction(async (conn) => {
+      await lockPlanning(conn);
+      if (!plan.shop) throw new Error('Plan shop snapshot is required');
+      const snapshot: PlanSnapshot = { shop: plan.shop, stops: plan.jobs.flatMap(job => job.stops.map(snapshotStop)) };
+      await validateSnapshot(conn, snapshot, plan.planDate);
       const [planResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO route_plans(plan_date,start_time,estimated_finish_time,rider_count,
          total_distance_km,total_delivery_cost,total_revenue,total_food_cost,
-         estimated_profit,status,routing_source,approximate)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+         estimated_profit,status,routing_source,approximate,input_snapshot)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           plan.planDate, toTime(startTime), toTime(plan.estimatedFinishTime),
           plan.riderCount, plan.totalDistanceKm, plan.totalDeliveryCost,
           plan.totalRevenue, plan.totalFoodCost, plan.estimatedProfit,
           'GENERATED', plan.routingSource, plan.approximate ? 1 : 0,
+          JSON.stringify(snapshot),
         ],
       );
       const routePlanId = planResult.insertId;
@@ -168,15 +178,17 @@ export class RoutePlanModel {
   }
 
   /** Full plan with jobs, stops, customer details, and geometry. */
-  static async findFull(routePlanId: number): Promise<RoutePlanDetailResponse | null> {
-    const [plans] = await getPool().execute<PlanRow[]>(
+  static async findFull(routePlanId: number, conn?: PoolConnection): Promise<RoutePlanDetailResponse | null> {
+    const db = conn ?? getPool();
+    const [plans] = await db.execute<PlanRow[]>(
       'SELECT * FROM route_plans WHERE route_plan_id = ?', [routePlanId]);
     const plan = plans[0];
     if (!plan) return null;
-    const [jobs] = await getPool().execute<JobRow[]>(
+    const [jobs] = await db.execute<JobRow[]>(
       'SELECT * FROM delivery_jobs WHERE route_plan_id = ? ORDER BY delivery_job_id', [routePlanId]);
     const full: RoutePlanDetailResponse = {
       ...toPlanSummary(plan, 0),
+      shop: readSnapshot(plan.input_snapshot)?.shop,
       routePlanId: plan.route_plan_id,
       totalBoxes: 0,
       totalRevenue: Number(plan.total_revenue ?? 0),
@@ -186,23 +198,24 @@ export class RoutePlanModel {
       jobs: [],
     };
     for (const [riderIndex, job] of jobs.entries()) {
-      const [stops] = await getPool().execute<StopRow[]>(STOP_QUERY, [job.delivery_job_id]);
-      full.jobs.push(toJobResponse(job, stops, riderIndex, full.approximate));
+      const [stops] = await db.execute<StopRow[]>(STOP_QUERY, [job.delivery_job_id]);
+      full.jobs.push(toJobResponse(job, stops, riderIndex, full.approximate, readSnapshot(plan.input_snapshot)));
       full.totalBoxes += job.total_boxes;
     }
     return full;
   }
 
-  static async findRiderJobs(riderId: number, planDate: string): Promise<Array<{ planId: number; job: DeliveryRouteResponse }>> {
-    const [rows] = await getPool().execute<Array<JobRow & { approximate: number | boolean }>>(
-      `SELECT dj.*, rp.approximate FROM delivery_jobs dj
+  static async findRiderJobs(riderId: number, planDate: string) {
+    const [rows] = await getPool().execute<Array<JobRow & { approximate: number | boolean; input_snapshot: PlanRow['input_snapshot'] }>>(
+      `SELECT dj.*, rp.approximate, rp.input_snapshot FROM delivery_jobs dj
        JOIN route_plans rp ON rp.route_plan_id=dj.route_plan_id
        WHERE dj.rider_id=? AND rp.plan_date=? AND rp.status='SELECTED'
        ORDER BY dj.delivery_job_id`, [riderId, planDate],
     );
     return Promise.all(rows.map(async (row) => ({
       planId: row.route_plan_id,
-      job: await this.mapJob(row, 0, Boolean(row.approximate)),
+      shop: readSnapshot(row.input_snapshot)?.shop,
+      job: await this.mapJob(row, 0, Boolean(row.approximate), readSnapshot(row.input_snapshot)),
     })));
   }
 
@@ -231,6 +244,7 @@ export class RoutePlanModel {
    */
   static async select(routePlanId: number): Promise<RoutePlanResponse | null> {
     const updated = await withTransaction(async (conn) => {
+      await lockPlanning(conn);
       // Lock the target row: concurrent selects of the SAME plan serialize here.
       const [plans] = await conn.execute<PlanRow[]>(
         'SELECT * FROM route_plans WHERE route_plan_id = ? FOR UPDATE', [routePlanId]);
@@ -240,7 +254,8 @@ export class RoutePlanModel {
         total: number; distinct_riders: number; unavailable: number;
       })[]>(
         `SELECT COUNT(*) AS total, COUNT(DISTINCT dj.rider_id) AS distinct_riders,
-         SUM(dj.rider_id IS NULL OR COALESCE(r.is_available, FALSE)=FALSE OR COALESCE(r.status,'INACTIVE')<>'ACTIVE') AS unavailable
+         SUM(dj.rider_id IS NULL OR COALESCE(r.is_available, FALSE)=FALSE OR COALESCE(r.status,'INACTIVE')<>'ACTIVE'
+          OR COALESCE(r.login_enabled,FALSE)=FALSE OR r.username IS NULL OR r.password_hash IS NULL) AS unavailable
          FROM delivery_jobs dj LEFT JOIN riders r ON r.rider_id=dj.rider_id
          WHERE dj.route_plan_id=?`, [routePlanId],
       );
@@ -259,6 +274,9 @@ export class RoutePlanModel {
           `RoutePlan ${rival.route_plan_id} is already SELECTED for ${toISODate(plan.plan_date)}`,
         );
       }
+      const snapshot = readSnapshot(plan.input_snapshot);
+      if (!snapshot) throw new PlanConflictError('This draft has no input snapshot; calculate a new plan');
+      await validateSnapshot(conn, snapshot, toISODate(plan.plan_date));
       await conn.execute('UPDATE route_plans SET status = ? WHERE route_plan_id = ?', ['SELECTED', routePlanId]);
       await conn.execute(
         `UPDATE orders SET status = 'PLANNED' WHERE status = 'PENDING' AND order_id IN
@@ -310,9 +328,10 @@ export class RoutePlanModel {
     job: JobRow,
     riderIndex: number,
     approximate: boolean,
+    snapshot: PlanSnapshot | null = null,
   ): Promise<DeliveryRouteResponse> {
     const [stops] = await getPool().execute<StopRow[]>(STOP_QUERY, [job.delivery_job_id]);
-    return toJobResponse(job, stops, riderIndex, approximate);
+    return toJobResponse(job, stops, riderIndex, approximate, snapshot);
   }
 }
 
@@ -361,6 +380,7 @@ export function toJobResponse(
   stops: StopRow[],
   riderIndex: number,
   approximate: boolean,
+  snapshot: PlanSnapshot | null = null,
 ): DeliveryRouteResponse {
     return {
       jobId: job.delivery_job_id,
@@ -391,6 +411,7 @@ export function toJobResponse(
         estimatedArrivalTime: hhmm(s.estimated_arrival_time),
         deliveryStatus: s.delivery_status,
         geometry: parseGeometry(s.leg_geometry),
+        ...snapshot?.stops.find(stop => stop.orderId === s.order_id),
       })),
     };
 }

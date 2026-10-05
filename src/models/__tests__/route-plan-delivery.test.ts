@@ -24,14 +24,14 @@ describe('RoutePlanModel.deliverStop', () => {
   });
 
   it('requires earlier stops to be delivered', async () => {
-    execute.mockResolvedValueOnce([[{ status: 'SELECTED', delivery_status: 'WAITING', stop_sequence: 2 }]])
+    execute.mockResolvedValueOnce([[{ status: 'SELECTED', delivery_status: 'PLANNED', stop_sequence: 2 }]])
       .mockResolvedValueOnce([[{ count: 1 }]]);
     await expect(RoutePlanModel.deliverStop(1, 2, 3)).rejects.toMatchObject({ statusCode: 409 });
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it('updates the stop, order and job together', async () => {
-    execute.mockResolvedValueOnce([[{ status: 'SELECTED', delivery_status: 'WAITING', stop_sequence: 1 }]])
+    execute.mockResolvedValueOnce([[{ status: 'SELECTED', delivery_status: 'PLANNED', stop_sequence: 1 }]])
       .mockResolvedValueOnce([[{ count: 0 }]])
       .mockResolvedValueOnce([{}])
       .mockResolvedValueOnce([[{ count: 0 }]])
@@ -44,10 +44,10 @@ describe('RoutePlanModel.deliverStop', () => {
 
 describe('RoutePlanModel.select', () => {
   it('rejects a plan with an unassigned job', async () => {
-    execute.mockResolvedValueOnce([[{ status: 'GENERATED' }]])
+    execute.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ status: 'GENERATED' }]])
       .mockResolvedValueOnce([[{ total: 1, distinct_riders: 0, unavailable: 1 }]]);
     await expect(RoutePlanModel.select(1)).rejects.toMatchObject({ statusCode: 422 });
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(3);
   });
 });
 
