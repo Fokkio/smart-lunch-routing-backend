@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS riders (
   rider_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   rider_name VARCHAR(150) NOT NULL,
+  username VARCHAR(100) NULL,
   phone VARCHAR(30) NULL,
   password_hash VARCHAR(255) NULL COMMENT 'bcrypt cost 10; null until owner sets a password.',
   login_enabled TINYINT(1) NOT NULL DEFAULT 1,
@@ -52,7 +53,8 @@ CREATE TABLE IF NOT EXISTS riders (
   status ENUM('ACTIVE','INACTIVE','SUSPENDED') NOT NULL DEFAULT 'ACTIVE',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (rider_id),
+    PRIMARY KEY (rider_id),
+    UNIQUE KEY uq_riders_username (username),
   UNIQUE KEY uq_riders_phone (phone),
   KEY idx_riders_available (is_available, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

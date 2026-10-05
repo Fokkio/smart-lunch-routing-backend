@@ -53,7 +53,7 @@ describe("RoutePlanningService.generate rider capacity", () => {
       id: Number(id), name: `Customer ${id}`, phone: '', address: '', lat: 16.2, lng: 103.2,
     }) as never);
     vi.mocked(RiderModel.findAvailable).mockResolvedValue([{
-      id: 1, name: 'Rider', phone: null, isAvailable: true,
+      id: 1, name: 'Rider', username: null, hasPassword: false, phone: null, isAvailable: true,
     }]);
 
     await expect(RoutePlanningService.generate('2026-10-04'))
@@ -80,7 +80,7 @@ describe("RoutePlanningService.generate route geometry", () => {
       lng: Number(id) === 1 ? far.longitude : near.longitude,
     }) as never);
     vi.mocked(RiderModel.findAvailable).mockResolvedValue([{
-      id: 1, name: 'Rider', phone: null, isAvailable: true,
+      id: 1, name: 'Rider', username: null, hasPassword: false, phone: null, isAvailable: true,
     }]);
     vi.mocked(fetchTravelMatrixWithFallback).mockResolvedValue({
       pointIds: ['SHOP', '1', '2'],
