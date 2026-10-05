@@ -128,6 +128,7 @@ Health check: `GET http://localhost:3000/api/health`
 - `GET /api/my-jobs?date=YYYY-MM-DD` returns only the signed-in rider's selected jobs.
 - `POST /api/my-jobs/:jobId/stops/:orderId/deliver` checks rider ownership inside the delivery transaction.
 - `PUT /api/riders/:id/password` lets an owner set or reset a rider password.
+- `PUT /api/riders/:id/account` lets an owner set a unique rider username and optional new password; it revokes existing sessions.
 
 Without DB credentials, DB-backed routes answer 503; bad `planDate` answers
 400; infeasible/no-order generations answer 422. Docs: `docs/distance-domain.md`,
@@ -177,7 +178,7 @@ npm.cmd run db:migrate:accounts
 npm.cmd run db:create-owner
 ```
 
-`db:create-owner` prompts for the username and password without echoing either value. It refuses to overwrite an existing owner. Passwords are bcrypt hashes at cost 10; plaintext passwords are not written to the repository. Rider usernames are their numeric `rider_id`. The owner sets a rider's initial password from the rider management page; riders can change their own password after login. Both password changes revoke existing rider sessions.
+`db:create-owner` prompts for the username and password without echoing either value. It refuses to overwrite an existing owner. Passwords are bcrypt hashes at cost 10; plaintext passwords are not written to the repository. The account migration gives existing riders a unique `rider_<id>` username. The owner can change it from the rider management page and set a rider's initial password there; riders can change their own password after login. Numeric rider IDs remain accepted during the UI rollout. Account or password changes revoke existing rider sessions.
 
 All customer, order, route-plan, rider-management and settings endpoints require an owner session. Rider job endpoints require a rider session. Sessions expire after 12 hours. Deploy backend and frontend together after running the migration; an old frontend cannot call the newly protected API.
 

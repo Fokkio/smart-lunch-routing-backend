@@ -9,6 +9,14 @@ async function columnExists(table: string, column: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+async function indexExists(table: string, index: string): Promise<boolean> {
+  const [rows] = await getPool().execute<RowDataPacket[]>(
+    'SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? AND index_name=? LIMIT 1',
+    [table, index],
+  );
+  return rows.length > 0;
+}
+
 async function main(): Promise<void> {
   await getPool().query(`CREATE TABLE IF NOT EXISTS admin_users (
     admin_user_id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(100) NOT NULL UNIQUE,
@@ -18,6 +26,13 @@ async function main(): Promise<void> {
   ) ENGINE=InnoDB`);
   if (!await columnExists('riders', 'password_hash')) {
     await getPool().query('ALTER TABLE riders ADD COLUMN password_hash VARCHAR(255) NULL');
+  }
+  if (!await columnExists('riders', 'username')) {
+    await getPool().query('ALTER TABLE riders ADD COLUMN username VARCHAR(100) NULL');
+  }
+  await getPool().query("UPDATE riders SET username=CONCAT('rider_',rider_id) WHERE username IS NULL");
+  if (!await indexExists('riders', 'uq_riders_username')) {
+    await getPool().query('ALTER TABLE riders ADD UNIQUE KEY uq_riders_username (username)');
   }
   if (!await columnExists('riders', 'login_enabled')) {
     await getPool().query('ALTER TABLE riders ADD COLUMN login_enabled BOOLEAN NOT NULL DEFAULT TRUE');

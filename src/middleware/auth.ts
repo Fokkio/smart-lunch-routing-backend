@@ -23,6 +23,12 @@ export async function verifyPassword(password: string, stored: string): Promise<
 
 function tokenHash(token: string): string { return createHash('sha256').update(token).digest('hex'); }
 
+export function normalizeRiderUsername(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const username = value.trim().toLowerCase();
+  return /^[a-z][a-z0-9._-]{2,39}$/.test(username) ? username : null;
+}
+
 export async function login(type: Identity['type'], username: string, password: string): Promise<{ token: string; user: Identity }> {
   await getPool().query('DELETE FROM auth_sessions WHERE expires_at<UTC_TIMESTAMP()');
   await getPool().query('DELETE FROM auth_login_attempts WHERE window_started_at<DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)');
@@ -36,10 +42,12 @@ export async function login(type: Identity['type'], username: string, password: 
   );
   const attempt = attempts[0];
   if (attempt?.blocked) throw Object.assign(new Error('Too many login attempts; try again later'), { statusCode: 429 });
+  const legacyRiderId = type === 'RIDER' && /^[1-9]\d*$/.test(username) && Number.isSafeInteger(Number(username))
+    ? Number(username) : null;
   const sql = type === 'OWNER'
     ? "SELECT admin_user_id AS id, COALESCE(display_name, username) AS name, password_hash, is_active AS enabled FROM admin_users WHERE username=? AND role='OWNER'"
-    : "SELECT rider_id AS id, rider_name AS name, password_hash, (login_enabled AND status='ACTIVE') AS enabled FROM riders WHERE rider_id=?";
-  const [rows] = await conn.execute<LoginRow[]>(sql, [username]);
+    : `SELECT rider_id AS id, rider_name AS name, password_hash, (login_enabled AND status='ACTIVE') AS enabled FROM riders WHERE ${legacyRiderId === null ? 'username' : 'rider_id'}=?`;
+  const [rows] = await conn.execute<LoginRow[]>(sql, [legacyRiderId ?? username.toLowerCase()]);
   const row = rows[0];
   if (!row?.password_hash || !row.enabled || !await verifyPassword(password, row.password_hash)) {
     const failures = (attempt?.stale ? 0 : Number(attempt?.failed_count ?? 0)) + 1;

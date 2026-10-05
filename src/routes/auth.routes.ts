@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getPool, withTransaction } from '../database/mysql.connection';
-import { type Identity, hashPassword, login, requireAuth, requireRider, verifyPassword } from '../middleware/auth';
+import { type Identity, hashPassword, login, normalizeRiderUsername, requireAuth, requireRider, verifyPassword } from '../middleware/auth';
 import type { RowDataPacket } from 'mysql2/promise';
 
 export const authRoutes = Router();
@@ -11,8 +11,9 @@ authRoutes.post('/login', async (req, res, next) => {
         username.length < 1 || username.length > 100 || password.length < 1 || password.length > 128) {
       res.status(400).json({ message: 'Role, username and password are required' }); return;
     }
-    if (role === 'RIDER' && (!/^[1-9]\d*$/.test(username) || !Number.isSafeInteger(Number(username)))) {
-      res.status(400).json({ message: 'Rider number must be a positive integer' }); return;
+    const legacyRiderId = /^[1-9]\d*$/.test(username) && Number.isSafeInteger(Number(username));
+    if (role === 'RIDER' && !normalizeRiderUsername(username) && !legacyRiderId) {
+      res.status(400).json({ message: 'Invalid rider username' }); return;
     }
     res.json(await login(role, username.trim(), password));
   } catch (error) { next(error); }
