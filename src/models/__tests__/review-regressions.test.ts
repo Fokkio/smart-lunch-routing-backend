@@ -17,6 +17,15 @@ const snapshot: PlanSnapshot = { shop, stops: [stop] };
 
 beforeEach(() => { vi.restoreAllMocks(); db.execute.mockReset(); db.query.mockReset(); });
 describe('delivery plan integrity', () => {
+  it('accepts snapshots with reordered JSON keys but still rejects a changed value', async () => {
+    const reorder = <T extends object>(value:T):T => Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))) as T;
+    const stored:PlanSnapshot={shop:reorder(shop),stops:[reorder(stop)]};
+    vi.spyOn(ShopSettingsModel,'get').mockResolvedValue(shop);
+    db.execute.mockResolvedValue([[stop]]);
+    await expect(validateSnapshot(db as never,stored,'2026-10-05')).resolves.toBeUndefined();
+    stored.stops[0]!.boxCount=3;
+    await expect(validateSnapshot(db as never,stored,'2026-10-05')).rejects.toMatchObject({statusCode:409});
+  });
   it('accepts unchanged inputs but rejects changed quantities, coordinates, cancelled/missing orders and new pending orders', async () => {
     vi.spyOn(ShopSettingsModel, 'get').mockResolvedValue(shop);
     db.execute.mockResolvedValue([[stop]]);
@@ -71,6 +80,8 @@ describe('delivery plan integrity', () => {
     const row = { order_id: 1, customer_id: 2, customer_name: 'Changed', customer_phone: '', customer_address: 'B', customer_latitude: 17, customer_longitude: 104, box_count: 3, delivery_status: 'DELIVERED' } as StopRow;
     const job = { delivery_job_id: 1, job_code: 'P1-R1', total_orders: 1, total_boxes: 2, rider_id: 2 } as JobRow;
     expect(toJobResponse(job, [row], 0, false, snapshot).stops[0]).toMatchObject({ ...snapshotStop(stop), deliveryStatus: 'DELIVERED' });
+    expect(toJobResponse({...job,status:'ASSIGNED'},[],0,false).status).toBe('WAITING');
+    expect(toJobResponse({...job,status:'DELIVERED'},[],0,false).status).toBe('COMPLETED');
   });
 });
 describe('rider account and API boundaries', () => {

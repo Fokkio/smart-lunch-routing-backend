@@ -1,8 +1,10 @@
 import {closePool,getPool,withTransaction} from '../src/database/mysql.connection';
 import {lockPlanning} from '../src/models/plan-inputs';
 import type {RowDataPacket} from 'mysql2/promise';
+import {migrateDeliveryStatus} from './migrate-delivery-status';
 
 export async function migrateDispatch():Promise<void>{
+  await migrateDeliveryStatus();
   for(const [table,column,definition] of [
     ['delivery_jobs','acknowledged_at','DATETIME NULL'],
     ['delivery_jobs','assigned_at','DATETIME NULL'],

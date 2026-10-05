@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { OrderService } from '../services/order.service';
 import { parseNearbyQuery, parseSimulationRequest } from './request-validation';
+import { validDate } from '../services/input-validation';
 
 /** Thin HTTP adapter — no SQL, no business rules here. */
 export class OrderController {
@@ -24,7 +25,12 @@ export class OrderController {
         req.query['radiusKm'],
         2,
       );
-      res.json(await OrderService.findNearby(lat, lng, radiusKm));
+      const date = req.query['date'];
+      const status = req.query['status'];
+      if ((date !== undefined && !validDate(date)) || (status !== undefined && (typeof status !== 'string' || !['PENDING','PLANNED','DELIVERING','DELIVERED','CANCELLED'].includes(status)))) {
+        res.status(400).json({ message: 'Invalid date or order status' }); return;
+      }
+      res.json(await OrderService.findNearby(lat, lng, radiusKm, {date: date as string | undefined,status: status as string | undefined}));
     } catch (err) {
       next(err);
     }

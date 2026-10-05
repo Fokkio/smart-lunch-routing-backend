@@ -20,7 +20,7 @@ export class RoutePlanController {
     try {
       const planDate = validatedDate(req.body?.planDate, res);
       if (!planDate) return;
-      res.status(201).json(await RoutePlanningService.generateAlternative(planDate, {startTime:req.body?.startTime,deadline:req.body?.deadline,orderIds:req.body?.orderIds}));
+      res.status(201).json(await RoutePlanningService.generateAlternative(planDate, {startTime:req.body?.startTime,deadline:req.body?.deadline,orderIds:req.body?.orderIds,basePlanId:req.body?.basePlanId}));
     } catch (error) {
       next(error);
     }

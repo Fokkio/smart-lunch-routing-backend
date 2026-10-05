@@ -277,7 +277,17 @@ Migration tests mock database calls. The dispatch migration has not yet been ver
 
 ## Open TODOs
 
-Legacy migration notes, live OSRM verification (unit tests mock HTTP), richer alternative-plan strategies. See code
+Legacy migration notes and live OSRM verification (unit tests mock HTTP). See code
 `TODO` comments and `docs/routing-pipeline.md`.
+
+### Alternative routes and legacy delivery statuses
+
+`POST /api/route-plans/recalculate` requires `basePlanId` of a GENERATED draft for the same date. The bounded seed/move/swap/visit-order search excludes the current route signature, checks capacity and service + travel time, ranks searched candidates by delivery cost then finish time, and returns 422 without persisting when none is found. It is not a global VRP optimum; a distinct alternative need not improve the current plan.
+
+`GET /api/orders/nearby` defaults to 2km and all dates/statuses, with optional validated `date` and `status`. Customer nearby search defaults to 1km. Radius distance is straight-line, not driving distance.
+
+For legacy ASSIGNED/DELIVERED job enums, inspect DB_* and obtain schema-change approval before `npm.cmd run db:migrate:delivery-status`. It appends WAITING/COMPLETED without dropping legacy values or changing the default/history; `db:migrate:dispatch` includes this check. DDL may lock the table briefly.
+
+`scripts/qa-live.ts` is an explicit opt-in real-database/browser test (`QA_ALLOW_REAL_DB=yes`), not part of npm test. It creates labelled QA data, retains evidence and disables QA accounts afterwards. Instructions/results are in workspace review/2026-10-05/IMPLEMENTATION_TESTS_TH.md. Never run it without authorization to create QA data.
 
 

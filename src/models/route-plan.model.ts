@@ -25,7 +25,7 @@ export type PlanRow = RowDataPacket & {
   input_snapshot?: string | PlanSnapshot | null;
 };
 export type JobRow = RowDataPacket & {
-  acknowledged_at?: string | Date | null; status?:'WAITING'|'DELIVERING'|'COMPLETED';
+  acknowledged_at?: string | Date | null; status?:'WAITING'|'DELIVERING'|'COMPLETED'|'ASSIGNED'|'DELIVERED';
   delivery_job_id: number; route_plan_id: number; rider_id: number | null;
   job_code: string; total_orders: number; total_boxes: number;
   total_distance_km: number | null; estimated_duration_min: number | null;
@@ -409,7 +409,7 @@ export function toJobResponse(
 ): DeliveryRouteResponse {
     return {
       acknowledgedAt: job.acknowledged_at instanceof Date ? job.acknowledged_at.toISOString() : job.acknowledged_at ?? null,
-      status: job.status ?? 'WAITING',
+      status: job.status === 'ASSIGNED' ? 'WAITING' : job.status === 'DELIVERED' ? 'COMPLETED' : job.status ?? 'WAITING',
       jobId: job.delivery_job_id,
       jobCode: job.job_code,
       riderIndex,

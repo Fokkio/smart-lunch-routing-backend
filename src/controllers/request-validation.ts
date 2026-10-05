@@ -6,6 +6,8 @@ export function parseNearbyQuery(
   radiusValue: unknown,
   defaultRadiusKm: number,
 ): { lat: number; lng: number; radiusKm: number } {
+  if (typeof latValue !== 'string' || !latValue.trim() || typeof lngValue !== 'string' || !lngValue.trim() ||
+      (radiusValue !== undefined && (typeof radiusValue !== 'string' || !radiusValue.trim()))) badRequest('Coordinates and radius must be numeric query strings');
   const lat = Number(latValue);
   const lng = Number(lngValue);
   const radiusKm = radiusValue === undefined ? defaultRadiusKm : Number(radiusValue);

@@ -14,6 +14,16 @@ describe('request validation', () => {
     expect(() => parseNearbyQuery('91', '103.25', undefined, 1)).toThrow('lat must be between');
   });
 
+  it('rejects missing, blank and repeated coordinate/radius query values', () => {
+    for (const lat of [undefined, null, '', ' ', ['16', '17'], 'NaN', 'Infinity']) {
+      expect(() => parseNearbyQuery(lat, '103', undefined, 1)).toThrow();
+    }
+    for (const radius of ['', ' ', ['1', '2'], '0', '-1', 'Infinity']) {
+      expect(() => parseNearbyQuery('16', '103', radius, 1)).toThrow();
+    }
+    expect(() => parseNearbyQuery('16', '', undefined, 2)).toThrow();
+  });
+
   it('defaults simulation to 25 orders', () => {
     expect(parseSimulationRequest(undefined, undefined)).toEqual({ count: 25, orderDate: undefined });
   });
