@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS delivery_jobs (
   KEY idx_delivery_jobs_route_plan (route_plan_id),
   KEY idx_delivery_jobs_rider_status (rider_id, status),
   CONSTRAINT fk_delivery_jobs_route_plan FOREIGN KEY (route_plan_id) REFERENCES route_plans (route_plan_id) ON DELETE CASCADE,
-  CONSTRAINT fk_delivery_jobs_rider FOREIGN KEY (rider_id) REFERENCES riders (rider_id) ON DELETE SET NULL,
+  CONSTRAINT fk_delivery_jobs_rider FOREIGN KEY (rider_id) REFERENCES riders (rider_id) ON DELETE RESTRICT,
   CONSTRAINT chk_delivery_jobs_totals CHECK (total_orders BETWEEN 0 AND 3 AND total_boxes >= 0),
   CONSTRAINT chk_delivery_jobs_distance_cost CHECK (
     (total_distance_km IS NULL OR total_distance_km >= 0) AND
