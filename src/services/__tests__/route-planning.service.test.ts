@@ -138,6 +138,14 @@ describe('RoutePlanningService alternative plans', () => {
     await expect(RoutePlanningService.generateAlternative('2026-10-05',{basePlanId:7,startTime:'11:00',deadline:'11:01'})).rejects.toMatchObject({statusCode:422});
     expect(RoutePlanModel.create).not.toHaveBeenCalled();
   });
+  it('inherits the draft time window unless explicitly overridden', async () => {
+    const findFull = vi.mocked(RoutePlanModel.findFull).getMockImplementation()!;
+    vi.mocked(RoutePlanModel.findFull).mockImplementation(async id => ({ ...await findFull(id), startTime: '13:00', deliveryDeadline: '15:00' }) as never);
+    await RoutePlanningService.generateAlternative('2026-10-05', { basePlanId: 7 });
+    expect(RoutePlanModel.create).toHaveBeenLastCalledWith(expect.objectContaining({ startTime: '13:00', deliveryDeadline: '15:00' }), '13:00');
+    await RoutePlanningService.generateAlternative('2026-10-05', { basePlanId: 7, startTime: '14:00', deadline: '16:00' });
+    expect(RoutePlanModel.create).toHaveBeenLastCalledWith(expect.objectContaining({ startTime: '14:00', deliveryDeadline: '16:00' }), '14:00');
+  });
   it('rejects invalid/missing base IDs and stale drafts before searching',async()=>{
     await expect(RoutePlanningService.generateAlternative('2026-10-05')).rejects.toMatchObject({statusCode:400});
     await expect(RoutePlanningService.generateAlternative('2026-10-06',{basePlanId:7})).rejects.toMatchObject({statusCode:409});

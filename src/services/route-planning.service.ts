@@ -162,6 +162,8 @@ export class RoutePlanningService {
     const base = await RoutePlanModel.findFull(options.basePlanId!);
     if (!base || base.planDate !== planDate || base.status !== 'GENERATED') throw Object.assign(new Error('The current draft is no longer available; refresh plans'), { statusCode: 409 });
     return this.generate(planDate, { ...options,
+      startTime: options.startTime ?? base.startTime ?? base.shop?.deliveryStartTime,
+      deadline: options.deadline ?? base.deliveryDeadline ?? base.shop?.deliveryDeadline,
       orderIds: options.orderIds ?? base.jobs.flatMap(job => job.stops.map(stop => stop.orderId)),
       excluded: routeSignature(base.jobs.map(job => job.stops.map(stop => String(stop.orderId)))) });
   }

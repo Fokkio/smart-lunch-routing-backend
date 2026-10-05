@@ -24,14 +24,14 @@ describe('RoutePlanModel.deliverStop', () => {
   });
 
   it('requires earlier stops to be delivered', async () => {
-    execute.mockResolvedValueOnce([[{ status: 'SELECTED', delivery_status: 'PLANNED', acknowledged_at:'2026-10-05', stop_sequence: 2 }]])
+    execute.mockResolvedValueOnce([[{ status: 'SELECTED', job_status: 'DELIVERING', delivery_status: 'DELIVERING', acknowledged_at:'2026-10-05', stop_sequence: 2 }]])
       .mockResolvedValueOnce([[{ count: 1 }]]);
     await expect(RoutePlanModel.deliverStop(1, 2, 3)).rejects.toMatchObject({ statusCode: 409 });
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it('updates the stop, order and job together', async () => {
-    execute.mockResolvedValueOnce([[{ status: 'SELECTED', delivery_status: 'PLANNED', acknowledged_at:'2026-10-05', stop_sequence: 1 }]])
+    execute.mockResolvedValueOnce([[{ status: 'SELECTED', job_status: 'DELIVERING', delivery_status: 'DELIVERING', acknowledged_at:'2026-10-05', stop_sequence: 1 }]])
       .mockResolvedValueOnce([[{ count: 0 }]])
       .mockResolvedValueOnce([{}])
       .mockResolvedValueOnce([[{ count: 0 }]])
@@ -39,6 +39,16 @@ describe('RoutePlanModel.deliverStop', () => {
     await expect(RoutePlanModel.deliverStop(1, 2, 3)).resolves.toBe(true);
     expect(execute.mock.calls[2]![0]).toContain("status='DELIVERED'");
     expect(execute.mock.calls[4]![1]).toEqual(['COMPLETED', 2]);
+  });
+  it.each([['WAITING', 'PLANNED'], ['DELIVERING', 'PLANNED'], ['WAITING', 'DELIVERING']])('rejects delivery before start: job %s, order %s', async (job_status, delivery_status) => {
+    execute.mockResolvedValueOnce([[{ status: 'SELECTED', job_status, delivery_status, acknowledged_at: '2026-10-05', stop_sequence: 1, rider_id: 9 }]]);
+    await expect(RoutePlanModel.deliverStop(1, 2, 3, 9)).rejects.toMatchObject({ statusCode: 409 });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+  it('allows retrying an already delivered stop without another write', async () => {
+    execute.mockResolvedValueOnce([[{ status: 'SELECTED', job_status: 'COMPLETED', delivery_status: 'DELIVERED', rider_id: 9 }]]);
+    await expect(RoutePlanModel.deliverStop(1, 2, 3, 9)).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });
 
