@@ -15,19 +15,6 @@ export class RiderController {
     }
   }
 
-  static async get(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const rider = await RiderService.findById(req.params['id'] as string);
-      if (!rider) {
-        res.status(404).json({ message: 'Rider not found' });
-        return;
-      }
-      res.json(rider);
-    } catch (err) {
-      next(err);
-    }
-  }
-
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       res.status(201).json(await RiderService.create(req.body));
@@ -44,6 +31,19 @@ export class RiderController {
         return;
       }
       res.json(rider);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const deleted = await RiderService.delete(req.params['id'] as string);
+      if (!deleted) {
+        res.status(404).json({ message: 'Rider not found' });
+        return;
+      }
+      res.status(204).end();
     } catch (err) {
       next(err);
     }

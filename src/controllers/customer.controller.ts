@@ -8,7 +8,7 @@ export class CustomerController {
     try {
       const search = typeof req.query['search'] === 'string' ? req.query['search'].trim() : '';
       if (search) {
-        res.json(await CustomerService.searchByName(search));
+        res.json(await CustomerService.search(search));
         return;
       }
       res.json(await CustomerService.findAll());
@@ -20,7 +20,10 @@ export class CustomerController {
   static async nearby(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { lat, lng, radiusKm } = parseNearbyQuery(
-        req.query['lat'], req.query['lng'], req.query['radiusKm'], 1,
+        req.query['lat'],
+        req.query['lng'],
+        req.query['radiusKm'],
+        1,
       );
       res.json(await CustomerService.findNearby(lat, lng, radiusKm));
     } catch (err) {

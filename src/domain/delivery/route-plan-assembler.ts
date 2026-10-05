@@ -39,6 +39,7 @@ export interface AssembleJob {
   orderIds: number[];
   riderId: number | null;
   geometry: GeoJsonLineString | null;
+  legGeometries?: Array<GeoJsonLineString | null>;
 }
 
 export interface AssembleInput {
@@ -51,6 +52,7 @@ export interface AssembleInput {
   /** Point ids must be `'SHOP'` plus `String(orderId)` for every order. */
   matrix: TravelMatrix;
   settings: CostSettings;
+  stopServiceMinutes?: number;
 }
 
 /**
@@ -71,7 +73,8 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
 
   const jobs: DeliveryRouteResponse[] = input.jobs.map((job, riderIndex) => {
     const legs = legTotals(input.matrix, indexOf, shopIndex, job.orderIds);
-    const finish = finishSeconds(startSeconds, legs.durationMinutes);
+    const serviceMinutes = (input.stopServiceMinutes ?? 0) * job.orderIds.length;
+    const finish = finishSeconds(startSeconds, legs.durationMinutes + serviceMinutes);
     if (!isOnTime(finish, deadlineSeconds)) {
       throw new InfeasiblePlanError(
         `Job ${riderIndex + 1} finishes ${secondsToHHMM(finish)} after deadline ${secondsToHHMM(deadlineSeconds)}`,
@@ -85,20 +88,23 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
       totalOrders: job.orderIds.length,
       totalBoxes: boxes,
       distanceKm: round2(legs.distanceKm),
-      durationMinutes: round2(legs.durationMinutes),
+      durationMinutes: round2(legs.durationMinutes + serviceMinutes),
       estimatedStartTime: secondsToHHMM(startSeconds),
       estimatedFinishTime: secondsToHHMM(finish),
       deliveryCost: 0, // filled below from shared cost calculation
       geometry: job.geometry,
       approximate: input.matrix.approximate,
-      stops,
+      stops: stops.map((stop, index) => ({ ...stop, geometry: job.legGeometries?.[index] ?? null })),
     };
   });
 
   const totalBoxes = input.orders.reduce((sum, o) => sum + o.boxCount, 0);
   const costs = calculateCosts(
     totalBoxes,
-    jobs.map((j) => exactJobDistance(input.matrix, indexOf, shopIndex, input.jobs[j.riderIndex]!.orderIds)),
+    jobs.map((j) => ({
+      distanceKm: exactJobDistance(input.matrix, indexOf, shopIndex, input.jobs[j.riderIndex]!.orderIds),
+      boxes: j.totalBoxes,
+    })),
     input.settings,
   );
   jobs.forEach((job, i) => {
@@ -206,6 +212,8 @@ function buildStops(
     const legMin = input.matrix.durationsMinutes[previous]![current]!;
     elapsedMinutes += legMin;
     previous = current;
+    const arrival = secondsToHHMM(finishSeconds(startSeconds, elapsedMinutes));
+    elapsedMinutes += input.stopServiceMinutes ?? 0;
     return {
       sequence: i + 1,
       orderId: order.orderId,
@@ -222,7 +230,8 @@ function buildStops(
       // stops can share an arrival label (e.g. 11:30 / 11:30). Internal
       // totals and deadline checks always use the exact fractional values.
       travelTimeFromPreviousMin: Math.round(legMin),
-      estimatedArrivalTime: secondsToHHMM(finishSeconds(startSeconds, elapsedMinutes)),
+      estimatedArrivalTime: arrival,
+      deliveryStatus: 'WAITING',
     };
   });
 }

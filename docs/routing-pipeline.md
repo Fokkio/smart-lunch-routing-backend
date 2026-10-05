@@ -60,9 +60,9 @@ later is not. Any late job ⇒ whole plan infeasible (never saved as valid).
 
 ## Cost (`domain/delivery/cost-calculator.ts`)
 
-From shop_settings (65 / 40 / 15 / 4): revenue = boxes×65, food = boxes×40,
-per-rider delivery = 15 + 4×routeKm (distance ONLY — the old `15 + 2×km×boxes`
-formula is retired), profit = revenue − food − delivery.
+From shop_settings (65 / 40 / 15 / 2): revenue = boxes×65, food = boxes×40,
+per-job delivery = 15 + 2×routeKm×jobBoxes (per Project.pdf: 15 THB base
+per trip + 2 THB per km per box carried), profit = revenue − food − delivery.
 
 ## RoutePlan pipeline (`services/route-planning.service.ts`)
 

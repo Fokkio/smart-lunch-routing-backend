@@ -45,12 +45,6 @@ POST /api/route-plans/generate → RoutePlanController → RoutePlanningService
   → deadline gate → cost → RoutePlanModel → TiDB
 ```
 
-Legacy demo flow (kept, payload-based, no DB):
-
-```
-POST /api/deliveries/plan → DeliveryController → DeliveryService → RoutePlanner
-```
-
 ## Structure
 
 The backend follows the controller/data-access separation taught in the
@@ -129,7 +123,12 @@ Health check: `GET http://localhost:3000/api/health`
 - `GET /api/route-plans?date=` → plan summaries
 - `GET /api/route-plans/:id` → full plan with jobs, stops, geometry
 - `POST /api/route-plans/:id/select` → SELECTED + orders move PENDING → PLANNED
-- Legacy demo (kept): `POST /api/deliveries/plan`, `POST /api/deliveries/plan-from-database`
+- `POST /api/auth/login` creates an owner or rider session; `GET /api/auth/me` checks it; `POST /api/auth/logout` revokes it.
+- `PUT /api/auth/password` lets a signed-in rider change their own password.
+- `GET /api/my-jobs?date=YYYY-MM-DD` returns only the signed-in rider's selected jobs.
+- `POST /api/my-jobs/:jobId/stops/:orderId/deliver` checks rider ownership inside the delivery transaction.
+- `PUT /api/riders/:id/password` lets an owner set or reset a rider password.
+- `PUT /api/riders/:id/account` lets an owner set a unique rider username and optional new password; it revokes existing sessions.
 
 Without DB credentials, DB-backed routes answer 503; bad `planDate` answers
 400; infeasible/no-order generations answer 422. Docs: `docs/distance-domain.md`,
@@ -167,14 +166,57 @@ because it already contains `orders.is_simulated`.
 npm.cmd run db:migrate
 npm.cmd run db:migrate:routing
 npm.cmd run db:migrate:simulation
+npm.cmd run db:migrate:cost-formula
+npx.cmd tsx scripts/run-sql.ts database/migrations/005_order_route_geometry.sql
 npm.cmd run db:init-settings
 ```
+
+Apply the account migration once before deploying the login UI. It checks existing columns, so it also works on databases that already have `admin_users` and `riders.password_hash`:
+
+```powershell
+npm.cmd run db:migrate:accounts
+npm.cmd run db:create-owner
+```
+
+`db:create-owner` prompts for the username and password without echoing either value. It refuses to overwrite an existing owner. Passwords are bcrypt hashes at cost 10; plaintext passwords are not written to the repository. The account migration gives existing riders a unique `rider_<id>` username. The owner can change it from the rider management page and set a rider's initial password there; riders can change their own password after login. Numeric rider IDs remain accepted during the UI rollout. Account or password changes revoke existing rider sessions.
+
+All customer, order, route-plan, rider-management and settings endpoints require an owner session. Rider job endpoints require a rider session. Sessions expire after 12 hours. Deploy backend and frontend together after running the migration; an old frontend cannot call the newly protected API.
+
+`npm.cmd run db:prune-drafts` previews generated/rejected plans older than 30 days. `npm.cmd run db:prune-drafts -- --apply` deletes only those drafts. Selected plans are excluded, and plans with completed deliveries cannot be deleted through the API. The old `deliveries` table is not used by runtime code; the reference schema no longer creates it. Remove an existing empty table only with a database account that has `DROP` privilege.
 
 `CORS_ORIGIN` accepts a comma-separated allowlist. If the database provider
 requires a CA certificate, use `DB_SSL_CA` for Vercel (PEM text, optionally
 with `\\n`) or `DB_SSL_CA_PATH` for a local certificate file.
 
 ## Deploy to Vercel
+
+### Review fixes: database migration
+
+The revised backend requires `route_plans.input_snapshot`. Before starting it
+against an existing database, back up the database, pause application writes,
+verify the target `DB_*` environment, and run the earlier migrations above first:
+
+```powershell
+npm.cmd run db:migrate:review
+```
+
+This command adds plan input snapshots, unique customer/rider phone constraints,
+and prevents deleting riders referenced by jobs. Duplicate phone numbers stop
+the command before schema changes; resolve duplicates explicitly without losing
+customer history. DDL is not atomic: if a later step fails, fix the cause and
+rerun the command, which checks existing columns, indexes, and constraints.
+
+The foreign key step requires `REFERENCES` permission on `riders`. If that step
+is denied, snapshots and draft invalidation have already committed; the command
+still fails to flag the incomplete constraint. Grant the required permission
+and rerun the same command to finish it.
+
+Legacy selected plans receive a baseline of currently stored customer and shop
+data. Original historical inputs cannot be reconstructed; this baseline does
+not prove that old geometry matches those inputs. Legacy generated drafts are
+rejected and must be recalculated. New plans retain their original inputs and
+are checked again before selection. Unit tests mock the database; this migration
+still needs verification against a disposable MySQL/TiDB database before production.
 
 No custom `vercel.json` is needed. `src/app.ts` exports the Express app as the
 default export for Vercel, while `src/server.ts` remains the local port
@@ -188,8 +230,7 @@ When importing the repository in Vercel:
 3. Add all `DB_*` values and `CORS_ORIGIN` to Production and Preview as needed.
 4. Apply migrations from a trusted local/admin environment before sending
    traffic to the deployment. Do not run migrations inside an API request.
-5. Verify `GET /api/health`, then a DB-backed endpoint such as
-   `GET /api/customers`.
+5. Verify `GET /api/health`, then log in and call a DB-backed endpoint with the returned bearer token.
 
 For CLI deployment, run from this backend directory after signing in:
 
@@ -200,10 +241,28 @@ npx.cmd vercel --prod
 
 ## Authoritative business rules
 
+### Dispatch rounds and rider acknowledgment
+
+- Generate accepts optional `startTime`, `deadline`, and a nonempty `orderIds` list of pending orders for that date. Omit `orderIds` to plan all pending orders. Orders outside an explicit batch remain pending for another round.
+- Available riders must be active, manually ready, have login credentials, and have no pending delivery in a selected plan. Assignment preference is today's assigned order count, then last assignment time, then rider ID. It does not guarantee equal distance or earnings.
+- Selecting a draft accepts an optional complete `assignments: [{jobId, riderId}]` mapping. Repeated riders, foreign jobs, changed inputs, or newly busy riders are rejected. The shop transaction lock serializes confirmation; disjoint rounds can coexist on the same date.
+- Rider endpoints `POST /api/my-jobs/:jobId/acknowledge` and `/start` require the assigned rider's identity. Acknowledgment is required before starting or recording delivery. Completed jobs cannot restart.
+- `stopServiceMinutes` is an integer from 0 to 30, default 0. Each stop's service time contributes to route duration, subsequent ETA, and deadline feasibility. Round windows and original shop settings are preserved in the input snapshot.
+
+For an existing database, finish the account and review migrations first, then run from this directory against the intended database:
+
+```powershell
+npm.cmd run db:migrate:dispatch
+```
+
+This idempotent migration adds `delivery_jobs.acknowledged_at`, `delivery_jobs.assigned_at`, and `shop_settings.stop_service_minutes`. It rejects old GENERATED drafts without the new timing settings; recalculate them. Selected history is preserved and is not marked acknowledged automatically. Legacy assignment ordering falls back to job creation time because the original assignment time cannot be reconstructed. ALTER TABLE steps are not atomic; fix any reported error and rerun.
+
+Migration tests mock database calls. The dispatch migration has not yet been verified against a real MySQL/TiDB database or applied to production as part of these local changes.
+
 - Order: 1–3 boxes. Rider: at most 3 ORDERS (no box-capacity rule).
 - Start 11:30, deadline 12:30, fallback speed 30 km/h (all from `shop_settings`).
-- Revenue = boxes × 65, food = boxes × 40, rider delivery = 15 + 4 × routeKm,
-  profit = revenue − food − delivery.
+- Revenue = boxes × 65, food = boxes × 40, rider delivery per job
+  = 15 + 2 × routeKm × boxes in job, profit = revenue − food − delivery.
 - Haversine = approximate straight-line fallback; OSRM = preferred road source
   (Leaflet + OpenStreetMap render the map; no Google APIs).
 
@@ -214,11 +273,11 @@ npx.cmd vercel --prod
 - Grouping limit of 3 orders/rider preserved as `MAX_ORDERS_PER_RIDER`
   (orders only — no box-capacity rule exists).
 - Cost/deadline values sourced from `shop_settings`
-  (65/40 THB, 15 + 4×km, 11:30→12:30, 30 km/h).
+  (65/40 THB, 15 + 2×km×boxes, 11:30→12:30, 30 km/h).
 
 ## Open TODOs
 
-Legacy migration notes, live OSRM verification (unit tests mock HTTP), richer alternative-plan strategies, rider job page. See code
+Legacy migration notes, live OSRM verification (unit tests mock HTTP), richer alternative-plan strategies. See code
 `TODO` comments and `docs/routing-pipeline.md`.
 
 

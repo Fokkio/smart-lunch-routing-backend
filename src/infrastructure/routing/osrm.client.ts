@@ -17,6 +17,7 @@ export interface OsrmRouteData {
   distanceMetres: number;
   durationSeconds: number;
   geometry: GeoJsonLineString;
+  legGeometries?: GeoJsonLineString[];
 }
 
 /** Parsed payload from OSRM Table service (null = no route for that pair). */
@@ -44,7 +45,7 @@ export class OsrmClient {
   async getRoute(points: Coordinate[]): Promise<OsrmRouteData> {
     for (const point of points) validateCoordinate(point);
     const body = await this.get(
-      `/route/v1/driving/${formatPoints(points)}?overview=full&geometries=geojson&steps=false`,
+      `/route/v1/driving/${formatPoints(points)}?overview=full&geometries=geojson&steps=true`,
     );
     return parseRouteBody(body);
   }
@@ -108,7 +109,17 @@ function parseRouteBody(body: unknown): OsrmRouteData {
   if (typeof duration !== 'number' || !Number.isFinite(duration)) {
     throw new RoutingError('MALFORMED_RESPONSE', 'OSRM route is missing numeric duration');
   }
-  return { distanceMetres: distance, durationSeconds: duration, geometry: parseGeometry(first['geometry']) };
+  const legs = first['legs'];
+  const legGeometries = Array.isArray(legs) ? legs.map((value) => {
+    const steps = asObject(value, 'leg')['steps'];
+    if (!Array.isArray(steps) || !steps.length) throw new RoutingError('MALFORMED_RESPONSE', 'OSRM leg has no steps');
+    const coordinates = steps.flatMap((step, index) => {
+      const points = parseGeometry(asObject(step, 'step')['geometry']).coordinates;
+      return index ? points.slice(1) : points;
+    });
+    return { type: 'LineString' as const, coordinates };
+  }) : undefined;
+  return { distanceMetres: distance, durationSeconds: duration, geometry: parseGeometry(first['geometry']), legGeometries };
 }
 
 function parseGeometry(value: unknown): GeoJsonLineString {

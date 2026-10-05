@@ -10,7 +10,7 @@ import {
  * SIMULATED EXAM — full RoutePlan from a hard-coded matrix.
  *
  * Question: shop S, 4 pending orders (A:2 boxes, B:1, C:3, D:2),
- * start 11:30, deadline 12:30, settings 65/40/15/4, approximate
+ * start 11:30, deadline 12:30, settings 65/40/15/2, approximate
  * (HAVERSINE) matrix below. Clustering gives [D,C] and [A,B];
  * sequencing gives [C,D] and [B,A]. What is the RoutePlan?
  *
@@ -18,14 +18,14 @@ import {
  *   S→A4 S→B2 S→C6 S→D9 | A→B2 A→C5 A→D8 | B→C4 B→D7 | C→D3
  *
  * Independent hand-computed answer:
- *   job0 [C,D]: 6+3 = 9 km / 9 min, finish 11:39
- *   job1 [B,A]: 2+2 = 4 km / 4 min, finish 11:34
+ *   job0 [C,D]: 6+3 = 9 km / 9 min, finish 11:39, 5 boxes
+ *   job1 [B,A]: 2+2 = 4 km / 4 min, finish 11:34, 3 boxes
  *   riders 2, distance 13 km, finish 11:39 (feasible)
  *   boxes 8 → revenue 520, food 320
- *   delivery (15+4×9)=51 + (15+4×4)=31 = 82 → profit 118
+ *   delivery (15+2×9×5)=105 + (15+2×4×3)=39 = 144 → profit 56
  */
 const SHOP = { latitude: 16.24631, longitude: 103.25286 };
-const SETTINGS = { boxSalePrice: 65, boxFoodCost: 40, riderBaseCost: 15, riderCostPerKm: 4 };
+const SETTINGS = { boxSalePrice: 65, boxFoodCost: 40, riderBaseCost: 15, riderCostPerKm: 2 };
 
 const MATRIX: TravelMatrix = {
   pointIds: ['SHOP', '1', '2', '3', '4'],
@@ -71,6 +71,22 @@ function examInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
 }
 
 describe('assembleRoutePlan exam', () => {
+  it('includes service at each stop in later arrivals and final deadline',()=>{
+    const plan=assembleRoutePlan(examInput({stopServiceMinutes:3,startTime:'13:00',deadline:'14:00'}));
+    expect(plan.jobs[0]!.stops.map(s=>s.estimatedArrivalTime)).toEqual(['13:06','13:12']);
+    expect(plan.jobs[0]!.durationMinutes).toBe(15);
+    expect(plan.estimatedFinishTime).toBe('13:15');
+    expect(plan.totalDistanceKm).toBe(13);
+    expect(()=>assembleRoutePlan(examInput({stopServiceMinutes:3,deadline:'11:44'}))).toThrow(InfeasiblePlanError);
+  });
+  it('attaches each road leg to the destination order in stop sequence', () => {
+    const first = { type: 'LineString' as const, coordinates: [[1, 1], [2, 2]] as Array<[number, number]> };
+    const second = { type: 'LineString' as const, coordinates: [[2, 2], [3, 3]] as Array<[number, number]> };
+    const input = examInput();
+    input.jobs[0]!.legGeometries = [first, second];
+    const stops = assembleRoutePlan(input).jobs[0]!.stops;
+    expect(stops.map(stop => [stop.orderId, stop.geometry])).toEqual([[3, first], [4, second]]);
+  });
   it('produces the known-answer RoutePlan', () => {
     const plan = assembleRoutePlan(examInput());
     expect(plan.riderCount).toBe(2);
@@ -81,21 +97,21 @@ describe('assembleRoutePlan exam', () => {
     expect(plan.totalBoxes).toBe(8);
     expect(plan.totalRevenue).toBe(520);
     expect(plan.totalFoodCost).toBe(320);
-    expect(plan.totalDeliveryCost).toBe(82);
-    expect(plan.estimatedProfit).toBe(118);
+    expect(plan.totalDeliveryCost).toBe(144);
+    expect(plan.estimatedProfit).toBe(56);
 
     const [job0, job1] = plan.jobs;
     expect(job0!.stops.map((s) => s.orderId)).toEqual([3, 4]);
     expect(job0!.distanceKm).toBe(9);
     expect(job0!.durationMinutes).toBe(9);
     expect(job0!.estimatedFinishTime).toBe('11:39');
-    expect(job0!.deliveryCost).toBe(51);
+    expect(job0!.deliveryCost).toBe(105);
     expect(job0!.stops[0]).toMatchObject({ sequence: 1, distanceFromPreviousKm: 6, estimatedArrivalTime: '11:36' });
     expect(job0!.stops[1]).toMatchObject({ sequence: 2, distanceFromPreviousKm: 3, estimatedArrivalTime: '11:39' });
     expect(job1!.stops.map((s) => s.orderId)).toEqual([2, 1]);
     expect(job1!.distanceKm).toBe(4);
     expect(job1!.estimatedFinishTime).toBe('11:34');
-    expect(job1!.deliveryCost).toBe(31);
+    expect(job1!.deliveryCost).toBe(39);
   });
 
   it('rejects a plan with a missing order', () => {

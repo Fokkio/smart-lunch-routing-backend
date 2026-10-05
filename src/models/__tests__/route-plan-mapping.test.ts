@@ -21,10 +21,10 @@ function livePlanRow(): PlanRow {
     estimated_finish_time: '11:32:00',
     rider_count: 1,
     total_distance_km: 0.76,
-    total_delivery_cost: 18.04,
+    total_delivery_cost: 24.12,
     total_revenue: 390,
     total_food_cost: 240,
-    estimated_profit: 131.96,
+    estimated_profit: 125.88,
     status: 'GENERATED',
     routing_source: 'ROAD',
     approximate: 0,
@@ -43,7 +43,7 @@ function liveJobRow(): JobRow {
     estimated_duration_min: 2,
     estimated_start_time: '11:30:00',
     estimated_finish_time: '11:32:00',
-    delivery_cost: 18.04,
+    delivery_cost: 24.12,
     route_geometry: {
       type: 'LineString',
       coordinates: [[103.25286, 16.24631], [103.2531, 16.2469]],
@@ -73,6 +73,7 @@ function liveStopRows(): StopRow[] {
 describe('toPlanSummary (GET /api/route-plans)', () => {
   it('returns real persisted metrics, never fake zeros', () => {
     expect(toPlanSummary(livePlanRow(), 6)).toEqual({
+      startTime:'11:30',deliveryDeadline:undefined,
       routePlanId: 1,
       planDate: '2026-09-21',
       status: 'GENERATED',
@@ -84,8 +85,8 @@ describe('toPlanSummary (GET /api/route-plans)', () => {
       totalBoxes: 6,
       totalRevenue: 390,
       totalFoodCost: 240,
-      totalDeliveryCost: 18.04,
-      estimatedProfit: 131.96,
+      totalDeliveryCost: 24.12,
+      estimatedProfit: 125.88,
     });
   });
 
@@ -99,7 +100,7 @@ describe('toJobResponse (GET /api/route-plans/:id)', () => {
     const job = toJobResponse(liveJobRow(), liveStopRows(), 0, false);
     expect(job.jobCode).toBe('P1-R1');
     expect(job.totalBoxes).toBe(6);
-    expect(job.deliveryCost).toBe(18.04);
+    expect(job.deliveryCost).toBe(24.12);
     expect(job.geometry).toEqual({
       type: 'LineString',
       coordinates: [[103.25286, 16.24631], [103.2531, 16.2469]],

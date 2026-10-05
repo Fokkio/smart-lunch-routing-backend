@@ -1,4 +1,4 @@
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+import { validDate } from '../services/input-validation';
 
 export function parseNearbyQuery(
   latValue: unknown,
@@ -22,7 +22,7 @@ export function parseSimulationRequest(countValue: unknown, dateValue: unknown):
   if (!Number.isInteger(count) || count < 20 || count > 30) {
     badRequest('count must be an integer between 20 and 30');
   }
-  if (dateValue !== undefined && (typeof dateValue !== 'string' || !DATE_PATTERN.test(dateValue))) {
+  if (dateValue !== undefined && !validDate(dateValue)) {
     badRequest('orderDate must be YYYY-MM-DD');
   }
   return { count, orderDate: dateValue as string | undefined };

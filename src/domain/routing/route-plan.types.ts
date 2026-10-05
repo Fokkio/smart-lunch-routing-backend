@@ -24,9 +24,13 @@ export interface RouteStopResponse {
   distanceFromPreviousKm: number;
   travelTimeFromPreviousMin: number;
   estimatedArrivalTime: string;
+  deliveryStatus: 'WAITING' | 'DELIVERING' | 'DELIVERED';
+  geometry?: GeoJsonLineString | null;
 }
 
 export interface DeliveryRouteResponse {
+  acknowledgedAt?: string | null;
+  status?: 'WAITING'|'DELIVERING'|'COMPLETED';
   jobId?: number;
   jobCode?: string;
   riderIndex: number;
@@ -45,6 +49,10 @@ export interface DeliveryRouteResponse {
 }
 
 export interface RoutePlanResponse {
+  partialBatch?: boolean;
+  startTime?: string;
+  deliveryDeadline?: string;
+  shop?: import('../../models/shop-settings.model').ShopSettings;
   routePlanId?: number;
   planDate: string;
   status: RoutePlanStatus;

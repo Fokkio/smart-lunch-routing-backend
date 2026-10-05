@@ -25,5 +25,5 @@ INSERT IGNORE INTO shop_settings (
   65.00,
   40.00,
   15.00,
-  4.00
+  2.00
 );
