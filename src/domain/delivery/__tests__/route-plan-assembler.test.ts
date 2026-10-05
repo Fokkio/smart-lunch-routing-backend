@@ -71,6 +71,14 @@ function examInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
 }
 
 describe('assembleRoutePlan exam', () => {
+  it('includes service at each stop in later arrivals and final deadline',()=>{
+    const plan=assembleRoutePlan(examInput({stopServiceMinutes:3,startTime:'13:00',deadline:'14:00'}));
+    expect(plan.jobs[0]!.stops.map(s=>s.estimatedArrivalTime)).toEqual(['13:06','13:12']);
+    expect(plan.jobs[0]!.durationMinutes).toBe(15);
+    expect(plan.estimatedFinishTime).toBe('13:15');
+    expect(plan.totalDistanceKm).toBe(13);
+    expect(()=>assembleRoutePlan(examInput({stopServiceMinutes:3,deadline:'11:44'}))).toThrow(InfeasiblePlanError);
+  });
   it('attaches each road leg to the destination order in stop sequence', () => {
     const first = { type: 'LineString' as const, coordinates: [[1, 1], [2, 2]] as Array<[number, number]> };
     const second = { type: 'LineString' as const, coordinates: [[2, 2], [3, 3]] as Array<[number, number]> };

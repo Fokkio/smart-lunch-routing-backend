@@ -241,6 +241,24 @@ npx.cmd vercel --prod
 
 ## Authoritative business rules
 
+### Dispatch rounds and rider acknowledgment
+
+- Generate accepts optional `startTime`, `deadline`, and a nonempty `orderIds` list of pending orders for that date. Omit `orderIds` to plan all pending orders. Orders outside an explicit batch remain pending for another round.
+- Available riders must be active, manually ready, have login credentials, and have no pending delivery in a selected plan. Assignment preference is today's assigned order count, then last assignment time, then rider ID. It does not guarantee equal distance or earnings.
+- Selecting a draft accepts an optional complete `assignments: [{jobId, riderId}]` mapping. Repeated riders, foreign jobs, changed inputs, or newly busy riders are rejected. The shop transaction lock serializes confirmation; disjoint rounds can coexist on the same date.
+- Rider endpoints `POST /api/my-jobs/:jobId/acknowledge` and `/start` require the assigned rider's identity. Acknowledgment is required before starting or recording delivery. Completed jobs cannot restart.
+- `stopServiceMinutes` is an integer from 0 to 30, default 0. Each stop's service time contributes to route duration, subsequent ETA, and deadline feasibility. Round windows and original shop settings are preserved in the input snapshot.
+
+For an existing database, finish the account and review migrations first, then run from this directory against the intended database:
+
+```powershell
+npm.cmd run db:migrate:dispatch
+```
+
+This idempotent migration adds `delivery_jobs.acknowledged_at`, `delivery_jobs.assigned_at`, and `shop_settings.stop_service_minutes`. It rejects old GENERATED drafts without the new timing settings; recalculate them. Selected history is preserved and is not marked acknowledged automatically. Legacy assignment ordering falls back to job creation time because the original assignment time cannot be reconstructed. ALTER TABLE steps are not atomic; fix any reported error and rerun.
+
+Migration tests mock database calls. The dispatch migration has not yet been verified against a real MySQL/TiDB database or applied to production as part of these local changes.
+
 - Order: 1–3 boxes. Rider: at most 3 ORDERS (no box-capacity rule).
 - Start 11:30, deadline 12:30, fallback speed 30 km/h (all from `shop_settings`).
 - Revenue = boxes × 65, food = boxes × 40, rider delivery per job

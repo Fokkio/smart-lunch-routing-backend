@@ -3,7 +3,7 @@ import type { RouteStopResponse } from '../domain/routing/route-plan.types';
 import { ShopSettingsModel, type ShopSettings } from './shop-settings.model';
 
 export type PlanStopInput = Pick<RouteStopResponse, 'orderId' | 'customerId' | 'customerName' | 'phone' | 'address' | 'latitude' | 'longitude' | 'boxCount'>;
-export type PlanSnapshot = { shop: ShopSettings; stops: PlanStopInput[] };
+export type PlanSnapshot = { shop: ShopSettings; stops: PlanStopInput[]; scope?:'BATCH';window?:{startTime:string;deadline:string} };
 
 export function snapshotStop(stop: PlanStopInput): PlanStopInput {
   const { orderId, customerId, customerName, phone, address, latitude, longitude, boxCount } = stop;
@@ -23,12 +23,14 @@ export async function lockPlanning(conn: PoolConnection): Promise<void> {
 }
 
 export async function validateSnapshot(conn: PoolConnection, snapshot: PlanSnapshot, planDate: string): Promise<void> {
+  const ids=snapshot.scope==='BATCH'?snapshot.stops.map(stop=>stop.orderId):[];
+  if(snapshot.scope==='BATCH'&&!ids.length)throw Object.assign(new Error('A round must contain orders'),{statusCode:409});
   const [orders] = await conn.execute<(RowDataPacket & PlanStopInput)[]>(
     `SELECT o.order_id AS orderId,o.customer_id AS customerId,o.box_count AS boxCount,
      c.name AS customerName,c.phone AS phone,c.address AS address,
      c.latitude AS latitude,c.longitude AS longitude FROM orders o
      JOIN customers c ON c.customer_id=o.customer_id
-     WHERE o.order_date=? AND o.status='PENDING' ORDER BY o.order_id FOR UPDATE`, [planDate],
+     WHERE o.order_date=? AND o.status='PENDING' ${ids.length?`AND o.order_id IN (${ids.map(()=>'?').join(',')})`:''} ORDER BY o.order_id FOR UPDATE`, [planDate,...ids],
   );
   const actual = orders.map(row => snapshotStop({ ...row, latitude: Number(row.latitude), longitude: Number(row.longitude) }));
   const expected = [...snapshot.stops].sort((a, b) => a.orderId - b.orderId);

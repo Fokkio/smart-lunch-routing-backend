@@ -3,7 +3,7 @@ import { badInput } from './input-validation';
 const keys = [
   'shopName', 'latitude', 'longitude', 'deliveryStartTime', 'deliveryDeadline',
   'maxOrdersPerRider', 'riderSpeedKmh', 'boxSalePrice', 'boxFoodCost',
-  'riderBaseCost', 'riderCostPerKm',
+  'riderBaseCost', 'riderCostPerKm', 'stopServiceMinutes',
 ] as const;
 
 export function validateSettings(input: unknown, current: ShopSettings): Partial<ShopSettings> {
@@ -11,6 +11,7 @@ export function validateSettings(input: unknown, current: ShopSettings): Partial
   const patch = input as Record<string, unknown>;
   if (Object.keys(patch).some(key => !keys.includes(key as typeof keys[number]))) badInput('Unknown shop setting');
   const merged = { ...current, ...patch } as ShopSettings;
+  if (merged.stopServiceMinutes !== undefined && (!Number.isInteger(merged.stopServiceMinutes) || merged.stopServiceMinutes < 0 || merged.stopServiceMinutes > 30)) badInput('Stop service minutes must be 0-30');
   if (typeof merged.shopName !== 'string' || !merged.shopName.trim() || merged.shopName.length > 150) badInput('Invalid shop name');
   if (typeof merged.latitude !== 'number' || !Number.isFinite(merged.latitude) || merged.latitude < -90 || merged.latitude > 90 ||
       typeof merged.longitude !== 'number' || !Number.isFinite(merged.longitude) || merged.longitude < -180 || merged.longitude > 180) badInput('Invalid shop coordinates');

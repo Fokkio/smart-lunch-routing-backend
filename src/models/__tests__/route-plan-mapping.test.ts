@@ -73,6 +73,7 @@ function liveStopRows(): StopRow[] {
 describe('toPlanSummary (GET /api/route-plans)', () => {
   it('returns real persisted metrics, never fake zeros', () => {
     expect(toPlanSummary(livePlanRow(), 6)).toEqual({
+      startTime:'11:30',deliveryDeadline:undefined,
       routePlanId: 1,
       planDate: '2026-09-21',
       status: 'GENERATED',

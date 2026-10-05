@@ -20,6 +20,8 @@ import { OrderModel } from '../models/order.model';
 import { RiderModel } from '../models/rider.model';
 import { RoutePlanModel } from '../models/route-plan.model';
 import { ShopSettingsModel } from '../models/shop-settings.model';
+import { badInput } from './input-validation';
+import type { JobAssignment } from '../models/route-plan.model';
 
 /**
  * RoutePlan application workflow (STEP 7 pipeline):
@@ -35,10 +37,15 @@ import { ShopSettingsModel } from '../models/shop-settings.model';
  */
 export class RoutePlanningService {
   /** Generate and persist a NEW plan (never overwrites previous plans). */
-  static async generate(planDate: string, options: { seedOffset?: number } = {}): Promise<RoutePlanResponse> {
+  static async generate(planDate: string, options: { seedOffset?: number; startTime?: string; deadline?: string;orderIds?:number[] } = {}): Promise<RoutePlanResponse> {
     const started = Date.now();
     const settings = await ShopSettingsModel.get();
-    const orders = await OrderModel.findAll({ date: planDate, status: 'PENDING' });
+    let orders = await OrderModel.findAll({ date: planDate, status: 'PENDING' });
+    if(options.orderIds!==undefined){
+      if(!Array.isArray(options.orderIds)||!options.orderIds.length||options.orderIds.some(id=>!Number.isSafeInteger(id)||id<1)||new Set(options.orderIds).size!==options.orderIds.length)badInput('Choose distinct positive order IDs');
+      const selected=new Set(options.orderIds);orders=orders.filter(order=>selected.has(order.id));
+      if(orders.length!==selected.size)badInput('Some chosen orders are no longer pending for this date');
+    }
     if (orders.length === 0) {
       throw new InfeasiblePlanError(`No pending orders for ${planDate}`);
     }
@@ -56,7 +63,7 @@ export class RoutePlanningService {
     });
 
     const maxOrders = settings.maxOrdersPerRider;
-    const riders = await RiderModel.findAvailable();
+    const riders = await RiderModel.findAvailable(planDate);
     const minimumRiders = minimumRiderCount(detailed.length, maxOrders);
     if (riders.length < minimumRiders) {
       throw new InfeasiblePlanError(`Need at least ${minimumRiders} available riders for ${detailed.length} orders; found ${riders.length}`);
@@ -75,8 +82,13 @@ export class RoutePlanningService {
     const clusterInput: ClusterOrder[] = detailed.map((o) => ({
       id: String(o.orderId), coordinate: { latitude: o.latitude, longitude: o.longitude },
     }));
-    const startSeconds = timeToSeconds(settings.deliveryStartTime);
-    const deadlineSeconds = timeToSeconds(settings.deliveryDeadline);
+    const startTime = options.startTime ?? settings.deliveryStartTime;
+    const deadline = options.deadline ?? settings.deliveryDeadline;
+    const validTime = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
+    if (typeof startTime !== 'string' || typeof deadline !== 'string' || !validTime.test(startTime) || !validTime.test(deadline)) badInput('Invalid round time');
+    const startSeconds = timeToSeconds(startTime);
+    const deadlineSeconds = timeToSeconds(deadline);
+    if (startSeconds >= deadlineSeconds) badInput('Round start must be before its deadline');
 
     let attempt: SequencedRoute[] | null = null;
     for (let count = minimumRiders; count <= Math.min(detailed.length, riders.length); count++) {
@@ -84,7 +96,7 @@ export class RoutePlanningService {
         maxOrdersPerRider: maxOrders, seedOffset: options.seedOffset ?? 0,
       });
       const routes = clusters.map((ids) => sequenceStops('SHOP', ids, matrix));
-      if (routes.every((route) => isOnTime(finishSeconds(startSeconds, route.totalDurationMinutes), deadlineSeconds))) {
+      if (routes.every((route) => isOnTime(finishSeconds(startSeconds, route.totalDurationMinutes + route.orderIds.length * (settings.stopServiceMinutes ?? 0)), deadlineSeconds))) {
         attempt = routes;
         break;
       }
@@ -112,7 +124,7 @@ export class RoutePlanningService {
 
     const plan = assembleRoutePlan({
       planDate, shop,
-      startTime: settings.deliveryStartTime, deadline: settings.deliveryDeadline,
+      startTime, deadline, stopServiceMinutes: settings.stopServiceMinutes ?? 0,
       orders: detailed, jobs, matrix,
       settings: {
         boxSalePrice: Number(settings.boxSalePrice), boxFoodCost: Number(settings.boxFoodCost),
@@ -121,7 +133,10 @@ export class RoutePlanningService {
     });
 
     plan.shop = settings;
-    const routePlanId = await RoutePlanModel.create(plan, settings.deliveryStartTime);
+    plan.partialBatch = options.orderIds!==undefined;
+    plan.startTime = startTime.slice(0, 5);
+    plan.deliveryDeadline = deadline.slice(0, 5);
+    const routePlanId = await RoutePlanModel.create(plan, startTime);
     const saved = await RoutePlanModel.findFull(routePlanId);
     if (!saved) throw new Error(`RoutePlan ${routePlanId} vanished after persist`);
     console.info(
@@ -136,8 +151,8 @@ export class RoutePlanningService {
   }
 
   /** Deterministic alternative: same pipeline, rotated cluster seeds → NEW plan. */
-  static generateAlternative(planDate: string): Promise<RoutePlanResponse> {
-    return this.generate(planDate, { seedOffset: 1 });
+  static generateAlternative(planDate: string, options: {startTime?:string;deadline?:string;orderIds?:number[]} = {}): Promise<RoutePlanResponse> {
+    return this.generate(planDate, { ...options, seedOffset: 1 });
   }
 
   static list(planDate?: string): Promise<RoutePlanSummaryResponse[]> {
@@ -148,8 +163,8 @@ export class RoutePlanningService {
     return RoutePlanModel.findFull(id);
   }
 
-  static select(id: number): Promise<RoutePlanResponse | null> {
-    return RoutePlanModel.select(id);
+  static select(id: number, assignments?: JobAssignment[]): Promise<RoutePlanResponse | null> {
+    return RoutePlanModel.select(id, assignments);
   }
 
   static delete(id: number): Promise<boolean> {

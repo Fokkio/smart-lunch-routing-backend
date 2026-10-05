@@ -63,7 +63,7 @@ describe('delivery plan integrity', () => {
   });
   it('cannot deliver an order that was cancelled or left pending', async () => {
     for (const status of ['CANCELLED', 'PENDING']) {
-      db.execute.mockResolvedValue([[{ status: 'SELECTED', delivery_status: status, stop_sequence: 1, rider_id: 2 }]]);
+      db.execute.mockResolvedValue([[{ status: 'SELECTED', delivery_status: status, acknowledged_at:'2026-10-05', stop_sequence: 1, rider_id: 2 }]]);
       await expect(RoutePlanModel.deliverStop(1, 2, 3, 2)).rejects.toMatchObject({ statusCode: 409 });
     }
   });

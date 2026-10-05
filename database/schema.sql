@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS orders (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS shop_settings (
+  stop_service_minutes INT NOT NULL DEFAULT 0,
   setting_id TINYINT UNSIGNED NOT NULL,
   shop_name VARCHAR(150) NOT NULL,
   latitude DECIMAL(10,7) NOT NULL,
@@ -134,6 +135,7 @@ CREATE TABLE IF NOT EXISTS route_plans (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS delivery_jobs (
+  acknowledged_at DATETIME NULL, assigned_at DATETIME NULL,
   delivery_job_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   route_plan_id INT UNSIGNED NOT NULL,
   rider_id INT UNSIGNED NULL,
