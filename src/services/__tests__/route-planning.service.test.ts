@@ -6,6 +6,7 @@ import { RiderModel } from "../../models/rider.model";
 import { ShopSettingsModel } from "../../models/shop-settings.model";
 import { fetchRouteGeometrySafe, fetchTravelMatrixWithFallback } from "../../infrastructure/routing/fallback-routing";
 import { RoutePlanningService } from "../route-planning.service";
+import { routeSignature } from '../../domain/delivery/alternative-plan';
 
 // แทน model จริงด้วยฟังก์ชันจำลอง จึงไม่เรียกฐานข้อมูล
 vi.mock("../../models/route-plan.model", () => ({
@@ -20,7 +21,7 @@ vi.mock("../../infrastructure/routing/fallback-routing", () => ({
   fetchRouteGeometrySafe: vi.fn(),
 }));
 vi.mock("../../models/order.model", () => ({ OrderModel: { findAll: vi.fn() } }));
-vi.mock("../../models/customer.model", () => ({ CustomerModel: { findById: vi.fn() } }));
+vi.mock("../../models/customer.model", () => ({ CustomerModel: { findByIds: vi.fn() } }));
 vi.mock("../../models/rider.model", () => ({ RiderModel: { findAvailable: vi.fn() } }));
 vi.mock("../../models/shop-settings.model", () => ({ ShopSettingsModel: { get: vi.fn() } }));
 
@@ -49,9 +50,9 @@ describe("RoutePlanningService.generate rider capacity", () => {
     vi.mocked(OrderModel.findAll).mockResolvedValue([1, 2, 3, 4].map(id => ({
       id, customerId: id, boxes: 1, status: 'PENDING', orderDate: '2026-10-04', isSimulated: true,
     })));
-    vi.mocked(CustomerModel.findById).mockImplementation(async id => ({
-      id: Number(id), name: `Customer ${id}`, phone: '', address: '', lat: 16.2, lng: 103.2,
-    }) as never);
+    vi.mocked(CustomerModel.findByIds).mockImplementation(async ids => ids.map(id => ({
+      id, name: `Customer ${id}`, phone: '', address: '', lat: 16.2, lng: 103.2,
+    })));
     vi.mocked(RiderModel.findAvailable).mockResolvedValue([{
       id: 1, name: 'Rider', username: null, hasPassword: false, phone: null, isAvailable: true,
     }]);
@@ -74,11 +75,11 @@ describe("RoutePlanningService.generate route geometry", () => {
     vi.mocked(OrderModel.findAll).mockResolvedValue([1, 2].map(id => ({
       id, customerId: id, boxes: 1, status: 'PENDING', orderDate: '2026-10-04', isSimulated: true,
     })));
-    vi.mocked(CustomerModel.findById).mockImplementation(async id => ({
-      id: Number(id), name: `Customer ${id}`, phone: '', address: '',
+    vi.mocked(CustomerModel.findByIds).mockImplementation(async ids => ids.map(id => ({
+      id, name: `Customer ${id}`, phone: '', address: '',
       lat: Number(id) === 1 ? far.latitude : near.latitude,
       lng: Number(id) === 1 ? far.longitude : near.longitude,
-    }) as never);
+    })));
     vi.mocked(RiderModel.findAvailable).mockResolvedValue([{
       id: 1, name: 'Rider', username: null, hasPassword: false, phone: null, isAvailable: true,
     }]);
@@ -110,5 +111,36 @@ describe("RoutePlanningService.generate route geometry", () => {
       }),
       '11:30:00',
     );
+  });
+});
+
+describe('RoutePlanningService alternative plans', () => {
+  beforeEach(() => {
+    vi.mocked(ShopSettingsModel.get).mockResolvedValue({latitude:16,longitude:103,maxOrdersPerRider:2,deliveryStartTime:'11:00',deliveryDeadline:'14:00',stopServiceMinutes:2,riderSpeedKmh:30,boxSalePrice:65,boxFoodCost:40,riderBaseCost:15,riderCostPerKm:2} as never);
+    vi.mocked(OrderModel.findAll).mockResolvedValue([1,2,3,4].map(id=>({id,customerId:id,boxes:1,status:'PENDING',orderDate:'2026-10-05',isSimulated:false})));
+    vi.mocked(CustomerModel.findByIds).mockImplementation(async ids=>ids.map(id=>({id,name:`Customer ${id}`,phone:'',address:'',lat:16+id/1000,lng:103})));
+    vi.mocked(RiderModel.findAvailable).mockResolvedValue([1,2].map(id=>({id,name:'Rider',username:'qa',hasPassword:true,phone:null,isAvailable:true})));
+    const distances=[[0,1,1,1,1],[1,0,1,9,9],[1,1,0,9,9],[1,9,9,0,1],[1,9,9,1,0]];
+    vi.mocked(fetchTravelMatrixWithFallback).mockResolvedValue({pointIds:['SHOP','1','2','3','4'],distancesKm:distances,durationsMinutes:distances,source:'ROAD',approximate:false});
+    vi.mocked(fetchRouteGeometrySafe).mockResolvedValue({distanceKm:1,durationMinutes:1,geometry:null,approximate:true});
+    vi.mocked(RoutePlanModel.create).mockResolvedValue(8);
+    vi.mocked(RoutePlanModel.findFull).mockImplementation(async id=>id===7?{routePlanId:7,planDate:'2026-10-05',status:'GENERATED',jobs:[{stops:[{orderId:1},{orderId:3}]},{stops:[{orderId:2},{orderId:4}]}]} as never:{routePlanId:8,riderCount:2,routingSource:'ROAD',approximate:false} as never);
+  });
+  it('loads customers once, excludes the current grouping and persists only the distinct feasible plan',async()=>{
+    await RoutePlanningService.generateAlternative('2026-10-05',{basePlanId:7});
+    expect(CustomerModel.findByIds).toHaveBeenCalledTimes(1);
+    const created=vi.mocked(RoutePlanModel.create).mock.calls[0]![0];
+    expect(routeSignature(created.jobs.map(job=>job.stops.map(stop=>String(stop.orderId))))).not.toBe(routeSignature([['1','3'],['2','4']]));
+    expect(created.totalDeliveryCost).toBe(46); // 2 × (15 + 2km × 2 baht × 2 boxes)
+    expect(created.jobs.flatMap(job=>job.stops.map(stop=>stop.orderId)).sort()).toEqual([1,2,3,4]);
+  });
+  it('does not persist when no feasible distinct alternative is found',async()=>{
+    await expect(RoutePlanningService.generateAlternative('2026-10-05',{basePlanId:7,startTime:'11:00',deadline:'11:01'})).rejects.toMatchObject({statusCode:422});
+    expect(RoutePlanModel.create).not.toHaveBeenCalled();
+  });
+  it('rejects invalid/missing base IDs and stale drafts before searching',async()=>{
+    await expect(RoutePlanningService.generateAlternative('2026-10-05')).rejects.toMatchObject({statusCode:400});
+    await expect(RoutePlanningService.generateAlternative('2026-10-06',{basePlanId:7})).rejects.toMatchObject({statusCode:409});
+    expect(fetchTravelMatrixWithFallback).not.toHaveBeenCalled();
   });
 });

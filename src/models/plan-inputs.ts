@@ -33,9 +33,10 @@ export async function validateSnapshot(conn: PoolConnection, snapshot: PlanSnaps
      WHERE o.order_date=? AND o.status='PENDING' ${ids.length?`AND o.order_id IN (${ids.map(()=>'?').join(',')})`:''} ORDER BY o.order_id FOR UPDATE`, [planDate,...ids],
   );
   const actual = orders.map(row => snapshotStop({ ...row, latitude: Number(row.latitude), longitude: Number(row.longitude) }));
-  const expected = [...snapshot.stops].sort((a, b) => a.orderId - b.orderId);
-  if (JSON.stringify(actual) !== JSON.stringify(expected) ||
-      JSON.stringify(await ShopSettingsModel.get(conn)) !== JSON.stringify(snapshot.shop)) {
+  // MySQL/TiDB JSON storage may reorder object keys; compare values, not serialized key order.
+  const expected = snapshot.stops.map(snapshotStop).sort((a, b) => a.orderId - b.orderId);
+  const actualShop = JSON.stringify(actual) === JSON.stringify(expected) ? await ShopSettingsModel.get(conn) : null;
+  if (!actualShop || (Object.keys(actualShop) as Array<keyof ShopSettings>).some(key => actualShop[key] !== snapshot.shop[key])) {
     throw Object.assign(new Error('Orders, customers or shop settings changed; calculate a new plan'), { statusCode: 409 });
   }
 }
