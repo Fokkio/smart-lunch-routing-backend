@@ -1,7 +1,7 @@
 import { type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
 import { getPool, withTransaction } from '../database/mysql.connection';
 import { lockPlanning } from './plan-inputs';
-const todayLocal=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+import { todayLocal } from './dates';
 export type Rider={id:number;name:string;username:string|null;hasPassword:boolean;phone:string|null;isAvailable:boolean;workStatus?:'READY'|'BUSY'|'DELIVERING'|'PAUSED'|'UNCONFIGURED';assignedOrdersToday?:number};
 export type RiderInput={name:string;phone?:string|null;isAvailable?:boolean};
 type Row=RowDataPacket&{rider_id:number;rider_name:string;username:string|null;password_hash:string|null;phone:string|null;is_available:number};

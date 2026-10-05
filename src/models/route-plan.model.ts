@@ -25,7 +25,7 @@ export type PlanRow = RowDataPacket & {
   input_snapshot?: string | PlanSnapshot | null;
 };
 export type JobRow = RowDataPacket & {
-  acknowledged_at?: string | Date | null; status?:'WAITING'|'DELIVERING'|'COMPLETED'|'ASSIGNED'|'DELIVERED';
+  acknowledged_at?: string | Date | null; status?:'WAITING'|'DELIVERING'|'COMPLETED'|'ASSIGNED'|'DELIVERED'|'CANCELLED';
   delivery_job_id: number; route_plan_id: number; rider_id: number | null;
   job_code: string; total_orders: number; total_boxes: number;
   total_distance_km: number | null; estimated_duration_min: number | null;
@@ -65,7 +65,8 @@ export class RoutePlanModel {
         WHERE dj.delivery_job_id=? AND dj.rider_id=? AND rp.status='SELECTED' FOR UPDATE`,[jobId,riderId]);
       const job=rows[0];
       if(!job)return false;
-      if(job.status==='COMPLETED')throw new PlanConflictError('This job is already completed');
+      if(job.status==='COMPLETED' || job.status==='DELIVERED')throw new PlanConflictError('This job is already completed');
+      if(job.status==='CANCELLED')throw new PlanConflictError('This job is cancelled');
       if(start && !job.acknowledged_at)throw new PlanConflictError('Acknowledge the job before starting');
       if(start){
         await conn.execute("UPDATE delivery_jobs SET status='DELIVERING' WHERE delivery_job_id=?",[jobId]);
@@ -77,9 +78,9 @@ export class RoutePlanModel {
   static async deliverStop(planId: number, jobId: number, orderId: number, riderId?: number): Promise<boolean> {
     return withTransaction(async (conn) => {
       const [rows] = await conn.execute<(RowDataPacket & {
-        status: RoutePlanStatus; delivery_status: string; stop_sequence: number; rider_id: number | null;acknowledged_at:string|null;
+        status: RoutePlanStatus; job_status: string; delivery_status: string; stop_sequence: number; rider_id: number | null;acknowledged_at:string|null;
       })[]>(
-        `SELECT rp.status, o.status AS delivery_status, djo.stop_sequence, dj.rider_id,dj.acknowledged_at
+        `SELECT rp.status, dj.status AS job_status, o.status AS delivery_status, djo.stop_sequence, dj.rider_id,dj.acknowledged_at
          FROM route_plans rp JOIN delivery_jobs dj ON dj.route_plan_id=rp.route_plan_id
          JOIN delivery_job_orders djo ON djo.delivery_job_id=dj.delivery_job_id
          JOIN orders o ON o.order_id=djo.order_id
@@ -94,8 +95,8 @@ export class RoutePlanModel {
       }
       if (stop.delivery_status === 'DELIVERED') return true;
       if (!stop.acknowledged_at) throw new PlanConflictError('Acknowledge the job before recording deliveries');
-      if (!['PLANNED', 'DELIVERING'].includes(stop.delivery_status)) {
-        throw Object.assign(new Error('Only assigned orders can be delivered'), { statusCode: 409 });
+      if (stop.job_status !== 'DELIVERING' || stop.delivery_status !== 'DELIVERING') {
+        throw new PlanConflictError('Start the job before recording deliveries');
       }
       const [earlier] = await conn.execute<(RowDataPacket & { count: number })[]>(
         `SELECT COUNT(*) AS count FROM delivery_job_orders djo
@@ -231,8 +232,11 @@ export class RoutePlanModel {
     const [rows] = await getPool().execute<Array<JobRow & { approximate: number | boolean; input_snapshot: PlanRow['input_snapshot'] }>>(
       `SELECT dj.*, rp.approximate, rp.input_snapshot FROM delivery_jobs dj
        JOIN route_plans rp ON rp.route_plan_id=dj.route_plan_id
-       WHERE dj.rider_id=? AND rp.plan_date=? AND rp.status='SELECTED'
-       ORDER BY dj.delivery_job_id`, [riderId, planDate],
+       WHERE dj.rider_id=? AND rp.status='SELECTED' AND (rp.plan_date=? OR
+        (rp.plan_date<? AND EXISTS(SELECT 1 FROM delivery_job_orders pending_stop
+         JOIN orders pending_order ON pending_order.order_id=pending_stop.order_id
+         WHERE pending_stop.delivery_job_id=dj.delivery_job_id AND pending_order.status IN ('PLANNED','DELIVERING'))))
+       ORDER BY rp.plan_date, dj.delivery_job_id`, [riderId, planDate, planDate],
     );
     return Promise.all(rows.map(async (row) => ({
       planId: row.route_plan_id,

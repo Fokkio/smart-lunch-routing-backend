@@ -15,6 +15,8 @@ riderJobRoutes.get('/', async (req, res, next) => {
       ShopSettingsModel.get(),
     ]);
     res.json(jobs.map(item => ({ ...item, shop: {
+      shopName: item.shop?.shopName ?? settings.shopName,
+      deliveryStartTime: (item.job.estimatedStartTime ?? item.shop?.deliveryStartTime ?? settings.deliveryStartTime).slice(0, 5),
       latitude: Number(item.shop?.latitude ?? settings.latitude), longitude: Number(item.shop?.longitude ?? settings.longitude),
       deliveryDeadline: (item.deliveryDeadline ?? item.shop?.deliveryDeadline ?? settings.deliveryDeadline).slice(0, 5),
     } })));

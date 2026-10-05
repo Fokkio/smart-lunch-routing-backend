@@ -10,9 +10,10 @@ export const routeSignature = (groups: string[][]): string => JSON.stringify(gro
 export function findAlternativeRoutes(input: {
   orders: ClusterOrder[]; boxes: Map<string, number>; shop: Coordinate; matrix: TravelMatrix;
   maxOrders: number; riderCount: number; availableMinutes: number; serviceMinutes: number;
-  costs: CostSettings; excluded: string;
+  costs: CostSettings; excluded: string | string[];
 }): SequencedRoute[] {
   const seen = new Set<string>();
+  const excluded = new Set(typeof input.excluded === 'string' ? [input.excluded] : input.excluded);
   let best: { routes: SequencedRoute[]; cost: number; finish: number; key: string } | null = null;
   // ponytail: bounded seed/move/swap search, not a global optimum; replace with a VRP solver if larger batches need it.
   const limit = 5000;
@@ -21,7 +22,7 @@ export function findAlternativeRoutes(input: {
     const key = routeSignature(routes.map(route => route.orderIds));
     if (seen.has(key)) return;
     seen.add(key);
-    if (key === input.excluded) return;
+    if (excluded.has(key)) return;
     const finish = Math.max(...routes.map(route => route.totalDurationMinutes + route.orderIds.length * input.serviceMinutes));
     if (finish > input.availableMinutes) return;
     const jobs = routes.map(route => ({ distanceKm: route.totalDistanceKm, boxes: route.orderIds.reduce((sum, id) => sum + input.boxes.get(id)!, 0) }));
@@ -32,7 +33,7 @@ export function findAlternativeRoutes(input: {
     if (seen.size >= limit || groups.some(group => !group.length || group.length > input.maxOrders)) return;
     const routes = groups.map(group => sequenceStops('SHOP', group, input.matrix));
     considerRoutes(routes);
-    if (routeSignature(routes.map(route => route.orderIds)) === input.excluded) {
+    if (excluded.has(routeSignature(routes.map(route => route.orderIds)))) {
       // A single rider can still take a different visit order; do not mistake one grouping for one route.
       routes.forEach((route, index) => {
         if (route.orderIds.length < 2) return;

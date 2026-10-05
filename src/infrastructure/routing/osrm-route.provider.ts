@@ -9,6 +9,7 @@ export interface RouteGeometry {
   /** GeoJSON LineString (`[longitude, latitude]`); null when unavailable. */
   geometry: GeoJsonLineString | null;
   legGeometries?: GeoJsonLineString[];
+  legs?: Array<{ distanceKm: number; durationMinutes: number }>;
   approximate: boolean;
 }
 
@@ -30,6 +31,7 @@ export class OsrmRouteProvider {
       durationMinutes: route.durationSeconds / 60,
       geometry: route.geometry,
       legGeometries: route.legGeometries,
+      legs: route.legs?.map(leg => ({ distanceKm: leg.distanceMetres / 1000, durationMinutes: leg.durationSeconds / 60 })),
       approximate: false,
     };
   }

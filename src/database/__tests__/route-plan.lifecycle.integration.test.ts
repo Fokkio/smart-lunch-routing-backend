@@ -139,4 +139,21 @@ describeIntegration('route plan lifecycle (TiDB)', () => {
     expect(unchanged?.jobs[0].riderId).toBeNull(); // Assignment rolls back with failed selection.
     expect((await RoutePlanModel.findFull(planBId))?.status).toBe('SELECTED');
   }, 60000);
+  it('keeps previous-day unfinished work visible only to its rider and requires start before delivery', async () => {
+    const own = fixture!;
+    const planId = planIds[1];
+    const jobId = (await RoutePlanModel.findFull(planId))!.jobs[0].jobId!;
+    const riderId = own.riderIds[1];
+    expect((await RoutePlanModel.findRiderJobs(riderId, '2100-01-01')).map(item => item.job.jobId)).toContain(jobId);
+    expect(await RoutePlanModel.findRiderJobs(own.riderIds[0], '2100-01-01')).toEqual([]);
+    expect(await RoutePlanModel.findRiderJobs(riderId, '2099-12-30')).toEqual([]);
+    await RoutePlanModel.acknowledgeJob(jobId, riderId);
+    await expect(RoutePlanModel.deliverStop(planId, jobId, own.orderId, riderId)).rejects.toMatchObject({ statusCode: 409 });
+    expect((await RoutePlanModel.findFull(planId))!.jobs[0].stops[0].deliveryStatus).toBe('WAITING');
+    await RoutePlanModel.acknowledgeJob(jobId, riderId, true);
+    expect(await RoutePlanModel.deliverStop(planId, jobId, own.orderId, riderId)).toBe(true);
+    expect(await RoutePlanModel.deliverStop(planId, jobId, own.orderId, riderId)).toBe(true);
+    expect(await RoutePlanModel.findRiderJobs(riderId, '2100-01-01')).toEqual([]);
+    expect((await RoutePlanModel.findRiderJobs(riderId, date))[0].job.status).toBe('COMPLETED');
+  }, 60000);
 });

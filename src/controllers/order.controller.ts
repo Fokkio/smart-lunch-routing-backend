@@ -59,9 +59,9 @@ export class OrderController {
     }
   }
 
-  static async clearSimulated(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async clearSimulated(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      res.json({ deletedCount: await OrderService.deleteSimulated() });
+      res.json({ deletedCount: await OrderService.deleteSimulated(req.body?.orderIds) });
     } catch (err) {
       next(err);
     }

@@ -18,6 +18,12 @@ function validate(input: Partial<CustomerInput>): void {
     });
   }
 
+  for (const field of ['first_name', 'last_name'] as const) {
+    if (input[field] !== undefined && typeof input[field] !== 'string') {
+      throw Object.assign(new Error(`${field} must be a string`), { statusCode: 400 });
+    }
+  }
+
   // NAME
   if (input.name !== undefined) {
     // ตรวจว่าเป็น string และห้ามว่าง
@@ -144,6 +150,7 @@ export class CustomerService {
 
     const name = (input.name?.trim() || `${input.first_name ?? ''} ${input.last_name ?? ''}`).trim();
     const effectiveInput = { ...input, name };
+    validate(effectiveInput);
 
     // การสร้างลูกค้าใหม่ต้องส่งข้อมูลจำเป็นให้ครบ
     if (
@@ -175,6 +182,7 @@ export class CustomerService {
 
     const name = input.name?.trim() || [input.first_name, input.last_name].filter(Boolean).join(' ').trim() || input.name;
     const effectiveInput = name !== undefined ? { ...input, name } : input;
+    validate(effectiveInput);
 
     // ถ้าแก้เฉพาะชื่อโดยไม่ส่งเบอร์มา ให้คงเบอร์เดิมไว้
     const normalizedInput =
