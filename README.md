@@ -206,6 +206,11 @@ the command before schema changes; resolve duplicates explicitly without losing
 customer history. DDL is not atomic: if a later step fails, fix the cause and
 rerun the command, which checks existing columns, indexes, and constraints.
 
+The foreign key step requires `REFERENCES` permission on `riders`. If that step
+is denied, snapshots and draft invalidation have already committed; the command
+still fails to flag the incomplete constraint. Grant the required permission
+and rerun the same command to finish it.
+
 Legacy selected plans receive a baseline of currently stored customer and shop
 data. Original historical inputs cannot be reconstructed; this baseline does
 not prove that old geometry matches those inputs. Legacy generated drafts are

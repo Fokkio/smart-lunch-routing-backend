@@ -16,3 +16,13 @@ it('can rerun when columns, uniqueness and restrictive foreign keys already exis
   await migrateReview(); await migrateReview();
   expect(db.query.mock.calls.some(([sql]) => String(sql).startsWith('ALTER'))).toBe(false);
 });
+it('finishes snapshot data but reports failure when the foreign key grant is missing', async () => {
+  db.execute.mockResolvedValue([[{ existing: 1 }]]);
+  db.query.mockImplementation(async (sql: string) => {
+    if (sql.includes('referential_constraints')) return [[{ constraint_name: 'fk_rider', delete_rule: 'SET NULL' }]];
+    if (sql.startsWith('ALTER')) throw new Error('REFERENCES command denied');
+    return [[]];
+  });
+  await expect(migrateReview()).rejects.toThrow('REFERENCES command denied');
+  expect(db.execute.mock.calls.some(([sql]) => String(sql).includes("SET status='REJECTED'"))).toBe(true);
+});

@@ -23,16 +23,6 @@ export async function migrateReview(): Promise<void> {
     );
     if (!indexes.length) await getPool().query(`ALTER TABLE ${table} ADD UNIQUE KEY uq_${table}_phone (phone)`);
   }
-  const [foreignKeys] = await getPool().query<(RowDataPacket & { constraint_name: string; delete_rule: string })[]>(
-    `SELECT constraint_name,delete_rule FROM information_schema.referential_constraints
-     WHERE constraint_schema=DATABASE() AND table_name='delivery_jobs' AND referenced_table_name='riders'`,
-  );
-  for (const key of foreignKeys) {
-    if (key.delete_rule === 'RESTRICT' || key.delete_rule === 'NO ACTION') continue;
-    if (!/^[a-zA-Z0-9_]+$/.test(key.constraint_name)) throw new Error('Unexpected foreign key name');
-    await getPool().query(`ALTER TABLE delivery_jobs DROP FOREIGN KEY \`${key.constraint_name}\`,
-      ADD CONSTRAINT fk_delivery_jobs_rider_restrict FOREIGN KEY(rider_id) REFERENCES riders(rider_id) ON DELETE RESTRICT`);
-  }
   await withTransaction(async conn => {
     await lockPlanning(conn);
     // Capture the currently displayed legacy data; past values cannot be reconstructed.
@@ -48,6 +38,17 @@ export async function migrateReview(): Promise<void> {
     }
     await conn.execute("UPDATE route_plans SET status='REJECTED' WHERE status='GENERATED' AND input_snapshot IS NULL");
   });
+  // Apply the usable data snapshot before privileged DDL; reruns still report a missing grant.
+  const [foreignKeys] = await getPool().query<(RowDataPacket & { constraint_name: string; delete_rule: string })[]>(
+    `SELECT constraint_name,delete_rule FROM information_schema.referential_constraints
+     WHERE constraint_schema=DATABASE() AND table_name='delivery_jobs' AND referenced_table_name='riders'`,
+  );
+  for (const key of foreignKeys) {
+    if (key.delete_rule === 'RESTRICT' || key.delete_rule === 'NO ACTION') continue;
+    if (!/^[a-zA-Z0-9_]+$/.test(key.constraint_name)) throw new Error('Unexpected foreign key name');
+    await getPool().query(`ALTER TABLE delivery_jobs DROP FOREIGN KEY \`${key.constraint_name}\`,
+      ADD CONSTRAINT fk_delivery_jobs_rider_restrict FOREIGN KEY(rider_id) REFERENCES riders(rider_id) ON DELETE RESTRICT`);
+  }
 }
 
 if (process.argv[1]?.replace(/\\/g, '/').endsWith('/migrate-review.ts')) {
