@@ -23,6 +23,7 @@ export function sequenceStops(
   shopId: string,
   orderIds: string[],
   matrix: TravelMatrix,
+  excludedOrder?: readonly string[],
 ): SequencedRoute {
   if (orderIds.length === 0) {
     throw new Error('sequenceStops needs at least one stop');
@@ -47,6 +48,7 @@ export function sequenceStops(
     }
     const ids = permutation.map((i) => matrix.pointIds[i]!);
     const key = ids.join(',');
+    if (excludedOrder && key === excludedOrder.join(',')) continue;
     if (
       best === null ||
       duration < best.totalDurationMinutes ||
@@ -59,7 +61,8 @@ export function sequenceStops(
       bestKey = key;
     }
   }
-  return best!;
+  if (!best) throw new Error('No distinct stop sequence');
+  return best;
 }
 
 function mustFindIndex(indexOf: Map<string, number>, id: string): number {

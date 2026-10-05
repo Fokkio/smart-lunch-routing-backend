@@ -72,7 +72,12 @@ export class OrderModel {
     return this.findAll({ status: 'PENDING' });
   }
 
-  static async findNearby(lat: number, lng: number, radiusKm: number): Promise<NearbyOrder[]> {
+  static async findNearby(lat: number, lng: number, radiusKm: number, filter: OrderFilter = {}): Promise<NearbyOrder[]> {
+    const where: string[] = [];
+    const values: (number | string)[] = [lat, lat, lng];
+    if (filter.date) { where.push('o.order_date=?'); values.push(filter.date); }
+    if (filter.status) { where.push('o.status=?'); values.push(filter.status); }
+    values.push(radiusKm);
     const [rows] = await getPool().execute<NearbyRow[]>(
       `SELECT o.*, c.name AS customer_name, c.latitude AS customer_latitude,
        c.longitude AS customer_longitude,
@@ -82,9 +87,10 @@ export class OrderModel {
          POWER(SIN(RADIANS(c.longitude - ?) / 2), 2)
        )) AS distance_km
        FROM orders o JOIN customers c ON c.customer_id = o.customer_id
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
        HAVING distance_km <= ?
        ORDER BY distance_km, o.order_id`,
-      [lat, lat, lng, radiusKm],
+      values,
     );
     return rows.map((row) => ({
       ...map(row),

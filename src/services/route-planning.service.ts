@@ -22,6 +22,7 @@ import { RoutePlanModel } from '../models/route-plan.model';
 import { ShopSettingsModel } from '../models/shop-settings.model';
 import { badInput } from './input-validation';
 import type { JobAssignment } from '../models/route-plan.model';
+import { findAlternativeRoutes, routeSignature } from '../domain/delivery/alternative-plan';
 
 /**
  * RoutePlan application workflow (STEP 7 pipeline):
@@ -37,7 +38,7 @@ import type { JobAssignment } from '../models/route-plan.model';
  */
 export class RoutePlanningService {
   /** Generate and persist a NEW plan (never overwrites previous plans). */
-  static async generate(planDate: string, options: { seedOffset?: number; startTime?: string; deadline?: string;orderIds?:number[] } = {}): Promise<RoutePlanResponse> {
+  static async generate(planDate: string, options: { seedOffset?: number; startTime?: string; deadline?: string;orderIds?:number[]; excluded?: string } = {}): Promise<RoutePlanResponse> {
     const started = Date.now();
     const settings = await ShopSettingsModel.get();
     let orders = await OrderModel.findAll({ date: planDate, status: 'PENDING' });
@@ -50,10 +51,10 @@ export class RoutePlanningService {
       throw new InfeasiblePlanError(`No pending orders for ${planDate}`);
     }
 
-    const customers = await Promise.all(orders.map((o) => CustomerModel.findById(String(o.customerId))));
+    const customers = new Map((await CustomerModel.findByIds(orders.map(o => o.customerId))).map(customer => [customer.id, customer]));
     const shop: Coordinate = { latitude: Number(settings.latitude), longitude: Number(settings.longitude) };
-    const detailed: AssembleOrder[] = orders.map((order, i) => {
-      const customer = customers[i];
+    const detailed: AssembleOrder[] = orders.map((order) => {
+      const customer = customers.get(order.customerId);
       if (!customer) throw new Error(`Customer ${order.customerId} for order ${order.id} not found`);
       return {
         orderId: order.id, customerId: customer.id, customerName: customer.name,
@@ -69,6 +70,13 @@ export class RoutePlanningService {
       throw new InfeasiblePlanError(`Need at least ${minimumRiders} available riders for ${detailed.length} orders; found ${riders.length}`);
     }
 
+    const startTime = options.startTime ?? settings.deliveryStartTime;
+    const deadline = options.deadline ?? settings.deliveryDeadline;
+    const validTime = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
+    if (typeof startTime !== 'string' || typeof deadline !== 'string' || !validTime.test(startTime) || !validTime.test(deadline)) badInput('Invalid round time');
+    const startSeconds = timeToSeconds(startTime);
+    const deadlineSeconds = timeToSeconds(deadline);
+    if (startSeconds >= deadlineSeconds) badInput('Round start must be before its deadline');
     const points: MatrixPoint[] = [
       { id: 'SHOP', coordinate: shop },
       ...detailed.map((o) => ({ id: String(o.orderId), coordinate: { latitude: o.latitude, longitude: o.longitude } })),
@@ -82,16 +90,14 @@ export class RoutePlanningService {
     const clusterInput: ClusterOrder[] = detailed.map((o) => ({
       id: String(o.orderId), coordinate: { latitude: o.latitude, longitude: o.longitude },
     }));
-    const startTime = options.startTime ?? settings.deliveryStartTime;
-    const deadline = options.deadline ?? settings.deliveryDeadline;
-    const validTime = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
-    if (typeof startTime !== 'string' || typeof deadline !== 'string' || !validTime.test(startTime) || !validTime.test(deadline)) badInput('Invalid round time');
-    const startSeconds = timeToSeconds(startTime);
-    const deadlineSeconds = timeToSeconds(deadline);
-    if (startSeconds >= deadlineSeconds) badInput('Round start must be before its deadline');
 
     let attempt: SequencedRoute[] | null = null;
-    for (let count = minimumRiders; count <= Math.min(detailed.length, riders.length); count++) {
+    if (options.excluded !== undefined) {
+      attempt = findAlternativeRoutes({ orders: clusterInput, boxes: new Map(detailed.map(order => [String(order.orderId), order.boxCount])), shop, matrix,
+        maxOrders, riderCount: riders.length, availableMinutes: (deadlineSeconds - startSeconds) / 60, serviceMinutes: settings.stopServiceMinutes ?? 0,
+        costs: {boxSalePrice:settings.boxSalePrice,boxFoodCost:settings.boxFoodCost,riderBaseCost:settings.riderBaseCost,riderCostPerKm:settings.riderCostPerKm}, excluded: options.excluded });
+    }
+    for (let count = minimumRiders; !attempt && count <= Math.min(detailed.length, riders.length); count++) {
       const clusters = clusterOrders(clusterInput, shop, count, {
         maxOrdersPerRider: maxOrders, seedOffset: options.seedOffset ?? 0,
       });
@@ -150,9 +156,14 @@ export class RoutePlanningService {
     return saved;
   }
 
-  /** Deterministic alternative: same pipeline, rotated cluster seeds → NEW plan. */
-  static generateAlternative(planDate: string, options: {startTime?:string;deadline?:string;orderIds?:number[]} = {}): Promise<RoutePlanResponse> {
-    return this.generate(planDate, { ...options, seedOffset: 1 });
+  /** Search distinct feasible groupings against the current draft before persisting. */
+  static async generateAlternative(planDate: string, options: {startTime?:string;deadline?:string;orderIds?:number[];basePlanId?:number} = {}): Promise<RoutePlanResponse> {
+    if (!Number.isSafeInteger(options.basePlanId) || options.basePlanId! < 1) badInput('basePlanId must identify the current draft');
+    const base = await RoutePlanModel.findFull(options.basePlanId!);
+    if (!base || base.planDate !== planDate || base.status !== 'GENERATED') throw Object.assign(new Error('The current draft is no longer available; refresh plans'), { statusCode: 409 });
+    return this.generate(planDate, { ...options,
+      orderIds: options.orderIds ?? base.jobs.flatMap(job => job.stops.map(stop => stop.orderId)),
+      excluded: routeSignature(base.jobs.map(job => job.stops.map(stop => String(stop.orderId)))) });
   }
 
   static list(planDate?: string): Promise<RoutePlanSummaryResponse[]> {

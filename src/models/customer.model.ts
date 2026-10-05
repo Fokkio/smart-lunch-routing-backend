@@ -99,6 +99,13 @@ export class CustomerModel {
     return rows[0] ? map(rows[0]) : null;
   }
 
+  static async findByIds(ids: number[]): Promise<Customer[]> {
+    const unique = [...new Set(ids)];
+    if (!unique.length) return [];
+    const [rows] = await getPool().execute<Row[]>(`SELECT * FROM customers WHERE customer_id IN (${unique.map(() => '?').join(',')})`, unique);
+    return rows.map(map);
+  }
+
   static async findByPhone(phone: string): Promise<Customer | null> {
     const [rows] = await getPool().execute<Row[]>(
       "SELECT * FROM customers WHERE phone = ? LIMIT 1",

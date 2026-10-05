@@ -35,8 +35,8 @@ export class OrderService {
     return OrderModel.findPending();
   }
 
-  static findNearby(lat: number, lng: number, radiusKm: number): Promise<NearbyOrder[]> {
-    return OrderModel.findNearby(lat, lng, radiusKm);
+  static findNearby(lat: number, lng: number, radiusKm: number, filter: {date?:string;status?:string} = {}): Promise<NearbyOrder[]> {
+    return OrderModel.findNearby(lat, lng, radiusKm, filter);
   }
 
   static findById(id: string): Promise<Order | null> {
