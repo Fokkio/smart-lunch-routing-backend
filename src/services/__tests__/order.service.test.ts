@@ -82,6 +82,6 @@ describe("Simulated order clear conflict", () => {
     vi.mocked(OrderModel.deleteSimulated).mockRejectedValueOnce(
       Object.assign(new Error('foreign key'), { code: 'ER_ROW_IS_REFERENCED_2' }),
     );
-    await expect(OrderService.deleteSimulated()).rejects.toMatchObject({ statusCode: 409 });
+    await expect(OrderService.deleteSimulated([1])).rejects.toMatchObject({ statusCode: 409 });
   });
 });

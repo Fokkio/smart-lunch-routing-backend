@@ -8,7 +8,7 @@ import {
 } from '../domain/delivery/route-plan-assembler';
 import { finishSeconds, isOnTime, timeToSeconds } from '../domain/delivery/deadline-rule';
 import type { Coordinate } from '../domain/routing/coordinate';
-import type { GeoJsonLineString, MatrixPoint } from '../domain/routing/distance.types';
+import type { MatrixPoint } from '../domain/routing/distance.types';
 import { sequenceStops, type SequencedRoute } from '../domain/routing/route-sequencer';
 import type { RoutePlanResponse, RoutePlanSummaryResponse } from '../domain/routing/route-plan.types';
 import { fetchTravelMatrixWithFallback, fetchRouteGeometrySafe } from '../infrastructure/routing/fallback-routing';
@@ -90,12 +90,16 @@ export class RoutePlanningService {
     const clusterInput: ClusterOrder[] = detailed.map((o) => ({
       id: String(o.orderId), coordinate: { latitude: o.latitude, longitude: o.longitude },
     }));
+    const alternative = (excluded: string | string[]) => findAlternativeRoutes({
+      orders: clusterInput, boxes: new Map(detailed.map(order => [String(order.orderId), order.boxCount])), shop, matrix,
+      maxOrders, riderCount: riders.length, availableMinutes: (deadlineSeconds - startSeconds) / 60,
+      serviceMinutes: settings.stopServiceMinutes ?? 0,
+      costs: { boxSalePrice: settings.boxSalePrice, boxFoodCost: settings.boxFoodCost, riderBaseCost: settings.riderBaseCost, riderCostPerKm: settings.riderCostPerKm }, excluded,
+    });
 
     let attempt: SequencedRoute[] | null = null;
     if (options.excluded !== undefined) {
-      attempt = findAlternativeRoutes({ orders: clusterInput, boxes: new Map(detailed.map(order => [String(order.orderId), order.boxCount])), shop, matrix,
-        maxOrders, riderCount: riders.length, availableMinutes: (deadlineSeconds - startSeconds) / 60, serviceMinutes: settings.stopServiceMinutes ?? 0,
-        costs: {boxSalePrice:settings.boxSalePrice,boxFoodCost:settings.boxFoodCost,riderBaseCost:settings.riderBaseCost,riderCostPerKm:settings.riderCostPerKm}, excluded: options.excluded });
+      attempt = alternative(options.excluded);
     }
     for (let count = minimumRiders; !attempt && count <= Math.min(detailed.length, riders.length); count++) {
       const clusters = clusterOrders(clusterInput, shop, count, {
@@ -107,11 +111,13 @@ export class RoutePlanningService {
         break;
       }
     }
-    if (!attempt) {
-      throw new InfeasiblePlanError(`No feasible plan for ${planDate}: deadline missed with ${riders.length} available rider(s)`);
-    }
+    if (!attempt) attempt = alternative([]);
 
     const routeProvider = new OsrmRouteProvider(osrm);
+    const rejected = options.excluded === undefined ? [] : [options.excluded];
+    let plan: RoutePlanResponse | undefined;
+    // ponytail: at most 10 final road-route candidates; a VRP solver is needed for exhaustive large-batch search.
+    for (let candidate = 0; candidate < 10; candidate++) {
     const geometries = await Promise.all(
       attempt.map(async (route) => {
         const coords = [shop, ...route.orderIds.map((id) => orderCoord(detailed, id))];
@@ -123,12 +129,15 @@ export class RoutePlanningService {
     const jobs: AssembleJob[] = attempt.map((route, i) => ({
       orderIds: route.orderIds.map(Number),
       riderId: riders[i]!.id,
-      geometry: geometries[i]?.geometry ?? null,
-      legGeometries: geometries[i]?.legGeometries?.length === route.orderIds.length
+      geometry: geometries[i]?.legs?.length === route.orderIds.length ? geometries[i]?.geometry ?? null : null,
+      legs: geometries[i]?.legs?.length === route.orderIds.length ? geometries[i]!.legs : undefined,
+      approximate: geometries[i]?.approximate !== false || geometries[i]?.legs?.length !== route.orderIds.length,
+      legGeometries: geometries[i]?.legs?.length === route.orderIds.length && geometries[i]?.legGeometries?.length === route.orderIds.length
         ? geometries[i]!.legGeometries : undefined,
     }));
 
-    const plan = assembleRoutePlan({
+    try {
+    plan = assembleRoutePlan({
       planDate, shop,
       startTime, deadline, stopServiceMinutes: settings.stopServiceMinutes ?? 0,
       orders: detailed, jobs, matrix,
@@ -137,6 +146,15 @@ export class RoutePlanningService {
         riderBaseCost: Number(settings.riderBaseCost), riderCostPerKm: Number(settings.riderCostPerKm),
       },
     });
+    break;
+    } catch (error) {
+      if (!(error instanceof InfeasiblePlanError)) throw error;
+      rejected.push(routeSignature(attempt.map(route => route.orderIds)));
+      if (candidate === 9) throw new InfeasiblePlanError('No road-feasible plan found within the bounded search; change the round inputs');
+      attempt = alternative(rejected);
+    }
+    }
+    if (!plan) throw new InfeasiblePlanError('No feasible route plan found');
 
     plan.shop = settings;
     plan.partialBatch = options.orderIds!==undefined;

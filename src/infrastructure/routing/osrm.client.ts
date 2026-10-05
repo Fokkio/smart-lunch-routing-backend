@@ -18,6 +18,7 @@ export interface OsrmRouteData {
   durationSeconds: number;
   geometry: GeoJsonLineString;
   legGeometries?: GeoJsonLineString[];
+  legs?: Array<{ distanceMetres: number; durationSeconds: number }>;
 }
 
 /** Parsed payload from OSRM Table service (null = no route for that pair). */
@@ -47,7 +48,11 @@ export class OsrmClient {
     const body = await this.get(
       `/route/v1/driving/${formatPoints(points)}?overview=full&geometries=geojson&steps=true`,
     );
-    return parseRouteBody(body);
+    const route = parseRouteBody(body);
+    if (route.legs && route.legs.length !== points.length - 1) {
+      throw new RoutingError('MALFORMED_RESPONSE', 'OSRM leg count does not match waypoints');
+    }
+    return route;
   }
 
   /** OSRM Table service for an N×N distance/duration matrix (one call). */
@@ -103,13 +108,23 @@ function parseRouteBody(body: unknown): OsrmRouteData {
   const first = asObject(routes[0], 'routes[0]');
   const distance = first['distance'];
   const duration = first['duration'];
-  if (typeof distance !== 'number' || !Number.isFinite(distance)) {
+  if (typeof distance !== 'number' || !Number.isFinite(distance) || distance < 0) {
     throw new RoutingError('MALFORMED_RESPONSE', 'OSRM route is missing numeric distance');
   }
-  if (typeof duration !== 'number' || !Number.isFinite(duration)) {
+  if (typeof duration !== 'number' || !Number.isFinite(duration) || duration < 0) {
     throw new RoutingError('MALFORMED_RESPONSE', 'OSRM route is missing numeric duration');
   }
   const legs = first['legs'];
+  const legMetrics = Array.isArray(legs) ? legs.map(value => {
+    const leg = asObject(value, 'leg');
+    const distanceMetres = leg['distance'];
+    const durationSeconds = leg['duration'];
+    if (typeof distanceMetres !== 'number' || !Number.isFinite(distanceMetres) || distanceMetres < 0 ||
+        typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds) || durationSeconds < 0) {
+      throw new RoutingError('MALFORMED_RESPONSE', 'OSRM leg metrics must be non-negative numbers');
+    }
+    return { distanceMetres, durationSeconds };
+  }) : undefined;
   const legGeometries = Array.isArray(legs) ? legs.map((value) => {
     const steps = asObject(value, 'leg')['steps'];
     if (!Array.isArray(steps) || !steps.length) throw new RoutingError('MALFORMED_RESPONSE', 'OSRM leg has no steps');
@@ -119,7 +134,7 @@ function parseRouteBody(body: unknown): OsrmRouteData {
     });
     return { type: 'LineString' as const, coordinates };
   }) : undefined;
-  return { distanceMetres: distance, durationSeconds: duration, geometry: parseGeometry(first['geometry']), legGeometries };
+  return { distanceMetres: distance, durationSeconds: duration, geometry: parseGeometry(first['geometry']), legGeometries, legs: legMetrics };
 }
 
 function parseGeometry(value: unknown): GeoJsonLineString {

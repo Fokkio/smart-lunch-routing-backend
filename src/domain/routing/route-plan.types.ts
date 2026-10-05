@@ -30,7 +30,7 @@ export interface RouteStopResponse {
 
 export interface DeliveryRouteResponse {
   acknowledgedAt?: string | null;
-  status?: 'WAITING'|'DELIVERING'|'COMPLETED';
+  status?: 'WAITING'|'DELIVERING'|'COMPLETED'|'CANCELLED';
   jobId?: number;
   jobCode?: string;
   riderIndex: number;

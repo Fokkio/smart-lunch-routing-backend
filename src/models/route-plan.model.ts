@@ -25,7 +25,7 @@ export type PlanRow = RowDataPacket & {
   input_snapshot?: string | PlanSnapshot | null;
 };
 export type JobRow = RowDataPacket & {
-  acknowledged_at?: string | Date | null; status?:'WAITING'|'DELIVERING'|'COMPLETED'|'ASSIGNED'|'DELIVERED';
+  acknowledged_at?: string | Date | null; status?:'WAITING'|'DELIVERING'|'COMPLETED'|'ASSIGNED'|'DELIVERED'|'CANCELLED';
   delivery_job_id: number; route_plan_id: number; rider_id: number | null;
   job_code: string; total_orders: number; total_boxes: number;
   total_distance_km: number | null; estimated_duration_min: number | null;
@@ -65,7 +65,8 @@ export class RoutePlanModel {
         WHERE dj.delivery_job_id=? AND dj.rider_id=? AND rp.status='SELECTED' FOR UPDATE`,[jobId,riderId]);
       const job=rows[0];
       if(!job)return false;
-      if(job.status==='COMPLETED')throw new PlanConflictError('This job is already completed');
+      if(job.status==='COMPLETED' || job.status==='DELIVERED')throw new PlanConflictError('This job is already completed');
+      if(job.status==='CANCELLED')throw new PlanConflictError('This job is cancelled');
       if(start && !job.acknowledged_at)throw new PlanConflictError('Acknowledge the job before starting');
       if(start){
         await conn.execute("UPDATE delivery_jobs SET status='DELIVERING' WHERE delivery_job_id=?",[jobId]);

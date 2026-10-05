@@ -40,6 +40,8 @@ export interface AssembleJob {
   riderId: number | null;
   geometry: GeoJsonLineString | null;
   legGeometries?: Array<GeoJsonLineString | null>;
+  legs?: Array<{ distanceKm: number; durationMinutes: number }>;
+  approximate?: boolean;
 }
 
 export interface AssembleInput {
@@ -72,7 +74,10 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
   const byId = new Map(input.orders.map((o) => [o.orderId, o]));
 
   const jobs: DeliveryRouteResponse[] = input.jobs.map((job, riderIndex) => {
-    const legs = legTotals(input.matrix, indexOf, shopIndex, job.orderIds);
+    const legs = job.legs ? {
+      distanceKm: job.legs.reduce((sum, leg) => sum + leg.distanceKm, 0),
+      durationMinutes: job.legs.reduce((sum, leg) => sum + leg.durationMinutes, 0),
+    } : legTotals(input.matrix, indexOf, shopIndex, job.orderIds);
     const serviceMinutes = (input.stopServiceMinutes ?? 0) * job.orderIds.length;
     const finish = finishSeconds(startSeconds, legs.durationMinutes + serviceMinutes);
     if (!isOnTime(finish, deadlineSeconds)) {
@@ -93,7 +98,7 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
       estimatedFinishTime: secondsToHHMM(finish),
       deliveryCost: 0, // filled below from shared cost calculation
       geometry: job.geometry,
-      approximate: input.matrix.approximate,
+      approximate: job.approximate ?? input.matrix.approximate,
       stops: stops.map((stop, index) => ({ ...stop, geometry: job.legGeometries?.[index] ?? null })),
     };
   });
@@ -102,7 +107,7 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
   const costs = calculateCosts(
     totalBoxes,
     jobs.map((j) => ({
-      distanceKm: exactJobDistance(input.matrix, indexOf, shopIndex, input.jobs[j.riderIndex]!.orderIds),
+      distanceKm: input.jobs[j.riderIndex]!.legs?.reduce((sum, leg) => sum + leg.distanceKm, 0) ?? exactJobDistance(input.matrix, indexOf, shopIndex, input.jobs[j.riderIndex]!.orderIds),
       boxes: j.totalBoxes,
     })),
     input.settings,
@@ -118,11 +123,11 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
   return {
     planDate: input.planDate,
     status: 'GENERATED',
-    routingSource: input.matrix.source,
-    approximate: input.matrix.approximate,
-    ...(input.matrix.fallbackReason ? { fallbackReason: input.matrix.fallbackReason } : {}),
+    routingSource: input.jobs.every(job => job.legs && !job.approximate) ? 'ROAD' : input.matrix.source,
+    approximate: jobs.some(job => job.approximate),
+    ...(jobs.some(job => job.approximate) ? { fallbackReason: input.matrix.fallbackReason ?? 'ROUTING_SERVICE_UNAVAILABLE' as const } : {}),
     riderCount: jobs.length,
-    totalDistanceKm: round2(jobs.reduce((sum, j) => sum + exactJobDistance(input.matrix, indexOf, shopIndex, input.jobs[j.riderIndex]!.orderIds), 0)),
+    totalDistanceKm: round2(input.jobs.reduce((sum, job) => sum + (job.legs?.reduce((total, leg) => total + leg.distanceKm, 0) ?? exactJobDistance(input.matrix, indexOf, shopIndex, job.orderIds)), 0)),
     estimatedFinishTime: secondsToHHMM(planFinish),
     totalBoxes: costs.totalBoxes,
     totalRevenue: costs.totalRevenue,
@@ -136,6 +141,9 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
 function validateCompleteness(input: AssembleInput): void {
   const seen = new Map<number, number>();
   for (const job of input.jobs) {
+    if (job.legs && (job.legs.length !== job.orderIds.length || job.legs.some(leg => !Number.isFinite(leg.distanceKm) || leg.distanceKm < 0 || !Number.isFinite(leg.durationMinutes) || leg.durationMinutes < 0))) {
+      throw new InfeasiblePlanError('Route leg metrics do not match the stops');
+    }
     if (job.orderIds.length < 1 || job.orderIds.length > 3) {
       throw new InfeasiblePlanError(`Every job must hold 1–3 orders, got ${job.orderIds.length}`);
     }
@@ -208,8 +216,8 @@ function buildStops(
   return job.orderIds.map((id, i) => {
     const order = byId.get(id)!;
     const current = mustHave(indexOf, String(id));
-    const legKm = input.matrix.distancesKm[previous]![current]!;
-    const legMin = input.matrix.durationsMinutes[previous]![current]!;
+    const legKm = job.legs?.[i]?.distanceKm ?? input.matrix.distancesKm[previous]![current]!;
+    const legMin = job.legs?.[i]?.durationMinutes ?? input.matrix.durationsMinutes[previous]![current]!;
     elapsedMinutes += legMin;
     previous = current;
     const arrival = secondsToHHMM(finishSeconds(startSeconds, elapsedMinutes));

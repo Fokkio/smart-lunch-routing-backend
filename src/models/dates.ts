@@ -14,9 +14,9 @@ export function toISODate(value: string | Date): string {
   return String(value).slice(0, 10);
 }
 
-/** Today's calendar date in server-local time (never UTC-shifted). */
-export function todayLocal(): string {
-  return formatLocal(new Date());
+/** Business date is Bangkok, independently of the process timezone. */
+export function todayLocal(date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
 function formatLocal(value: Date): string {

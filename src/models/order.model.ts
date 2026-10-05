@@ -141,8 +141,8 @@ export class OrderModel {
     return rows.map(map);
   }
 
-  static async deleteSimulated(): Promise<number> {
-    const [result] = await getPool().execute<ResultSetHeader>('DELETE FROM orders WHERE is_simulated=TRUE');
+  static async deleteSimulated(orderIds: number[]): Promise<number> {
+    const [result] = await getPool().execute<ResultSetHeader>(`DELETE FROM orders WHERE is_simulated=TRUE AND order_id IN (${orderIds.map(() => '?').join(',')})`, orderIds);
     return result.affectedRows;
   }
 
@@ -150,6 +150,10 @@ export class OrderModel {
     await withTransaction(async conn => {
       await lockPlanning(conn);
       await guardPlanEdit(conn, 'o.order_id=?', [id]);
+      const [rows] = await conn.execute<Row[]>('SELECT * FROM orders WHERE order_id=? FOR UPDATE', [id]);
+      if (rows[0] && !['PENDING', 'CANCELLED'].includes(rows[0].status)) {
+        throw Object.assign(new Error('Delivery orders must be changed through their delivery job'), { statusCode: 409 });
+      }
       await conn.execute(
       'UPDATE orders SET customer_id=COALESCE(?,customer_id),order_date=COALESCE(?,order_date),box_count=COALESCE(?,box_count),status=COALESCE(?,status) WHERE order_id=?',
       [input.customerId ?? null, input.orderDate ?? null, input.boxes ?? null, input.status ?? null, id],

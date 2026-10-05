@@ -134,6 +134,36 @@ describe('RoutePlanningService alternative plans', () => {
     expect(created.totalDeliveryCost).toBe(46); // 2 × (15 + 2km × 2 baht × 2 boxes)
     expect(created.jobs.flatMap(job=>job.stops.map(stop=>stop.orderId)).sort()).toEqual([1,2,3,4]);
   });
+  it('uses final road legs for distance, ETA, costs and geometry rather than matrix totals', async () => {
+    const geometry = { type: 'LineString' as const, coordinates: [[103, 16], [103, 16.01]] as [number, number][] };
+    vi.mocked(fetchRouteGeometrySafe).mockResolvedValue({ distanceKm: 7, durationMinutes: 9, geometry, legGeometries: [geometry, geometry],
+      legs: [{ distanceKm: 2.5, durationMinutes: 3 }, { distanceKm: 4.5, durationMinutes: 6 }], approximate: false });
+    await RoutePlanningService.generate('2026-10-05');
+    const plan = vi.mocked(RoutePlanModel.create).mock.calls[0]![0];
+    expect(plan.totalDistanceKm).toBe(14); expect(plan.totalDeliveryCost).toBe(86); expect(plan.approximate).toBe(false);
+    expect(plan.jobs[0]).toMatchObject({ distanceKm: 7, durationMinutes: 13, estimatedFinishTime: '11:13', geometry });
+    expect(plan.jobs[0].stops.map(stop => [stop.distanceFromPreviousKm, stop.travelTimeFromPreviousMin, stop.estimatedArrivalTime])).toEqual([[2.5, 3, '11:03'], [4.5, 6, '11:11']]);
+  });
+  it('finds an initial feasible grouping even when every initial cluster misses the deadline', async () => {
+    const distances = [[0,1,1,1,1],[1,0,9,1,1],[1,9,0,1,1],[1,1,1,0,9],[1,1,1,9,0]];
+    vi.mocked(fetchTravelMatrixWithFallback).mockResolvedValue({ pointIds: ['SHOP','1','2','3','4'], distancesKm: distances, durationsMinutes: distances, source: 'ROAD', approximate: false });
+    vi.mocked(ShopSettingsModel.get).mockResolvedValue({ ...await ShopSettingsModel.get(), stopServiceMinutes: 0 } as never);
+    await RoutePlanningService.generate('2026-10-05', { deadline: '11:05' });
+    const plan = vi.mocked(RoutePlanModel.create).mock.calls[0]![0];
+    expect(plan.jobs).toHaveLength(2); expect(plan.jobs.every(job => job.durationMinutes <= 5)).toBe(true);
+  });
+  it('retries a distinct candidate when the final road route misses a matrix-feasible deadline', async () => {
+    vi.mocked(ShopSettingsModel.get).mockResolvedValue({ ...await ShopSettingsModel.get(), stopServiceMinutes: 0 } as never);
+    const geometry = { type: 'LineString' as const, coordinates: [[103, 16], [103, 16.01]] as [number, number][] };
+    vi.mocked(fetchRouteGeometrySafe).mockResolvedValue({ distanceKm: 2, durationMinutes: 2, geometry, approximate: false,
+      legs: [{ distanceKm: 1, durationMinutes: 1 }, { distanceKm: 1, durationMinutes: 1 }] });
+    vi.mocked(fetchRouteGeometrySafe).mockResolvedValueOnce({ distanceKm: 2, durationMinutes: 400, geometry, approximate: false,
+      legs: [{ distanceKm: 1, durationMinutes: 200 }, { distanceKm: 1, durationMinutes: 200 }] });
+    await RoutePlanningService.generate('2026-10-05');
+    expect(vi.mocked(fetchRouteGeometrySafe).mock.calls.length).toBeGreaterThan(2);
+    expect(RoutePlanModel.create).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(RoutePlanModel.create).mock.calls[0]![0].jobs.every(job => job.durationMinutes === 2)).toBe(true);
+  });
   it('does not persist when no feasible distinct alternative is found',async()=>{
     await expect(RoutePlanningService.generateAlternative('2026-10-05',{basePlanId:7,startTime:'11:00',deadline:'11:01'})).rejects.toMatchObject({statusCode:422});
     expect(RoutePlanModel.create).not.toHaveBeenCalled();

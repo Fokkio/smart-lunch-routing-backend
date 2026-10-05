@@ -46,6 +46,7 @@ export class OrderService {
 
   static create(input: OrderInput): Promise<Order> {
     validate(input);
+    if (input.status !== undefined && input.status.toUpperCase() !== 'PENDING') badInput('New orders must be PENDING');
     if (!Number.isInteger(input.customerId) || input.customerId < 1) {
       throw Object.assign(new Error('customerId must be a positive integer'), { statusCode: 400 });
     }
@@ -61,9 +62,10 @@ export class OrderService {
     return OrderModel.createSimulated(count, orderDate);
   }
 
-  static async deleteSimulated(): Promise<number> {
+  static async deleteSimulated(orderIds: number[]): Promise<number> {
+    if (!Array.isArray(orderIds) || !orderIds.length || orderIds.length > 500 || orderIds.some(id => !Number.isSafeInteger(id) || id < 1) || new Set(orderIds).size !== orderIds.length) badInput('Choose 1–500 distinct positive order IDs');
     try {
-      return await OrderModel.deleteSimulated();
+      return await OrderModel.deleteSimulated(orderIds);
     } catch (error) {
       if (typeof error === 'object' && error !== null && 'code' in error &&
           (error as { code?: unknown }).code === 'ER_ROW_IS_REFERENCED_2') {
@@ -79,6 +81,7 @@ export class OrderService {
   static update(id: string, input: Partial<OrderInput>): Promise<Order | null> {
     validateId(id);
     validate(input);
+    if (input.status !== undefined && !['PENDING', 'CANCELLED'].includes(input.status.toUpperCase())) badInput('Delivery statuses can only change through delivery jobs');
     return OrderModel.update(id, normalizeStatus(input)).catch(handleOrderWriteError);
   }
 

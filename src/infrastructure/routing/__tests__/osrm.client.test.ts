@@ -31,13 +31,14 @@ describe('OsrmClient route conversion', () => {
       distance: 20, duration: 5,
       geometry: { type: 'LineString', coordinates: [[1, 1], [2, 2], [3, 3]] },
       legs: [
-        { steps: [{ geometry: { type: 'LineString', coordinates: [[1, 1], [1.5, 1.5]] } }, { geometry: { type: 'LineString', coordinates: [[1.5, 1.5], [2, 2]] } }] },
-        { steps: [{ geometry: { type: 'LineString', coordinates: [[2, 2], [3, 3]] } }] },
+        { distance: 8, duration: 2, steps: [{ geometry: { type: 'LineString', coordinates: [[1, 1], [1.5, 1.5]] } }, { geometry: { type: 'LineString', coordinates: [[1.5, 1.5], [2, 2]] } }] },
+        { distance: 12, duration: 3, steps: [{ geometry: { type: 'LineString', coordinates: [[2, 2], [3, 3]] } }] },
       ],
     }] })).getRoute([SHOP, STOP, SHOP]);
     expect(route.legGeometries?.map(leg => leg.coordinates)).toEqual([
       [[1, 1], [1.5, 1.5], [2, 2]], [[2, 2], [3, 3]],
     ]);
+    expect(route.legs).toEqual([{ distanceMetres: 8, durationSeconds: 2 }, { distanceMetres: 12, durationSeconds: 3 }]);
   });
   it('converts metres/seconds to km/minutes with source ROAD semantics', async () => {
     const client = CLIENT(okFetch(VALID_ROUTE));
