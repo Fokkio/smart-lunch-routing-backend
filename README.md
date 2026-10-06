@@ -112,9 +112,9 @@ Health check: `GET http://localhost:3000/api/health`
 
 - `GET/POST /api/customers`, `GET/PUT/DELETE /api/customers/:id`
 - `GET /api/customers?search=สมชาย` searches any part of the stored name
-- `GET /api/customers/nearby` (fixed 1km from saved shop location; optional `radiusKm=1`)
+- `GET /api/customers/nearby` (from saved shop location; `radiusKm` defaults to 1)
 - `GET/POST /api/orders` (`?status=&date=&customerId=` supported), `GET/PUT/DELETE /api/orders/:id`
-- `GET /api/orders/nearby` (fixed 2km from saved shop location; optional `radiusKm=2`)
+- `GET /api/orders/nearby` (from saved shop location; `radiusKm` defaults to 2)
 - `POST /api/orders/simulate` with optional `{ "count": 25, "orderDate": "YYYY-MM-DD" }`
 - `DELETE /api/orders/simulated` deletes only rows created by the simulation endpoint
 - `GET/POST /api/riders` (`?available=true` supported), `GET/PUT /api/riders/:id`
@@ -284,7 +284,7 @@ Legacy migration notes and live OSRM verification (unit tests mock HTTP). See co
 
 `POST /api/route-plans/recalculate` requires `basePlanId` of a GENERATED draft for the same date. The bounded seed/move/swap/visit-order search excludes the current route signature, checks capacity and service + travel time, ranks searched candidates by delivery cost then finish time, and returns 422 without persisting when none is found. It is not a global VRP optimum; a distinct alternative need not improve the current plan.
 
-`GET /api/orders/nearby` searches within 2km of the shop's persisted coordinates across all dates/statuses, with optional validated `date` and `status`. Customer nearby search uses 1km from the same saved shop location. Both endpoints load the current shop settings on every search. Client `lat`/`lng` are ignored; any supplied `radiusKm` must equal the endpoint's fixed radius or returns 400. Radius distance is straight-line, not driving distance.
+`GET /api/orders/nearby` searches within the requested radius of the shop's persisted coordinates (default 2km) across all dates/statuses, with optional validated `date` and `status`. Customer nearby search defaults to 1km from the same saved shop location. Both endpoints load the current shop settings on every search. Client `lat`/`lng` are ignored; `radiusKm` accepts any finite positive number, including decimals; zero, negative, blank and nonnumeric values return 400. Radius distance is straight-line, not driving distance.
 
 For legacy ASSIGNED/DELIVERED job enums, inspect DB_* and obtain schema-change approval before `npm.cmd run db:migrate:delivery-status`. It appends WAITING/COMPLETED without dropping legacy values or changing the default/history; `db:migrate:dispatch` includes this check. DDL may lock the table briefly.
 

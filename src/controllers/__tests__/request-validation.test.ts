@@ -14,11 +14,11 @@ describe('request validation', () => {
     expect(() => parseNearbyQuery('91', '103.25', undefined, 1)).toThrow('lat must be between');
   });
 
-  it('fixes customer search at 1km and order search at 2km', () => {
+  it('accepts positive custom radii including decimals and large distances', () => {
     expect(parseNearbyQuery('16','103',undefined,2).radiusKm).toBe(2);
     for (const radius of [1,2]) {
       expect(parseNearbyQuery('16','103',String(radius),radius).radiusKm).toBe(radius);
-      for(const changed of ['0.5','3','50']) expect(()=>parseNearbyQuery('16','103',changed,radius)).toThrow(`radiusKm must be ${radius}`);
+      for(const changed of ['0.5','3','50','10000']) expect(parseNearbyQuery('16','103',changed,radius).radiusKm).toBe(Number(changed));
     }
   });
 

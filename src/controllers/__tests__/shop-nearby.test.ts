@@ -20,5 +20,7 @@ describe('nearby search uses persisted shop location',()=>{
   vi.mocked(ShopSettingsModel.get).mockResolvedValue({latitude:16.26,longitude:103.26} as any);
   await CustomerController.nearby({query:{}} as Request,res,next);
   expect(CustomerService.findNearby).toHaveBeenLastCalledWith(16.26,103.26,1);
+  await OrderController.nearby({query:{radiusKm:'3.5'}} as unknown as Request,res,next);
+  expect(OrderService.findNearby).toHaveBeenLastCalledWith(16.26,103.26,3.5,{date:undefined,status:undefined});
  });
 });
