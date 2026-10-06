@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { OrderService } from '../services/order.service';
 import { parseNearbyQuery, parseSimulationRequest } from './request-validation';
 import { validDate } from '../services/input-validation';
+import { ShopSettingsModel } from '../models/shop-settings.model';
 
 /** Thin HTTP adapter — no SQL, no business rules here. */
 export class OrderController {
@@ -19,9 +20,10 @@ export class OrderController {
 
   static async nearby(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const shop = await ShopSettingsModel.get();
       const { lat, lng, radiusKm } = parseNearbyQuery(
-        req.query['lat'],
-        req.query['lng'],
+        String(shop.latitude),
+        String(shop.longitude),
         req.query['radiusKm'],
         2,
       );

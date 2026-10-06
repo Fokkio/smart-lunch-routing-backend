@@ -60,12 +60,12 @@ async function main() {
         orders.push({...order,status});
       }
       // Real SQL distance query checked against independent spherical distance, including all dates/statuses.
-      const nearby=await api(`/orders/nearby?lat=${center.lat}&lng=${center.lng}`,token);
+      const nearby=await api('/orders/nearby',token);
       for(const order of orders) assert.equal(nearby.some((row:any)=>row.id===order.id),order.customerId!==customers[4].id);
-      const cancelled=await api(`/orders/nearby?lat=${center.lat}&lng=${center.lng}&date=${historyDate}&status=CANCELLED`,token);
+      const cancelled=await api(`/orders/nearby?date=${historyDate}&status=CANCELLED`,token);
       assert(cancelled.some((row:any)=>row.id===orders[4].id));
       assert(!cancelled.some((row:any)=>row.id===orders[5].id));
-      for(const bad of ['lat=&lng=103','lat=91&lng=103','lat=16&lng=103&radiusKm=0','lat=16&lng=103&date=2026-02-30','lat=16&lng=103&status=WRONG']) await api(`/orders/nearby?${bad}`,token,undefined,'GET',400);
+      for(const bad of ['radiusKm=0','radiusKm=3','radiusKm=','date=2026-02-30','status=WRONG']) await api(`/orders/nearby?${bad}`,token,undefined,'GET',400);
       await api('/route-plans/recalculate',token,{planDate:date},'POST',400);
       const planId=await runSmoke({baseURL:'http://127.0.0.1:4300',width,data:{ownerUsername:run,password,center,customers,orders,riders},outputDir:resolve(process.env.QA_OUTPUT_DIR || '../review/2026-10-06/screenshots')});
       const saved=await api(`/route-plans/${planId}`,token);

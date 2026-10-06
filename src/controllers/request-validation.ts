@@ -13,8 +13,8 @@ export function parseNearbyQuery(
   const radiusKm = radiusValue === undefined ? defaultRadiusKm : Number(radiusValue);
   if (!Number.isFinite(lat) || lat < -90 || lat > 90) badRequest('lat must be between -90 and 90');
   if (!Number.isFinite(lng) || lng < -180 || lng > 180) badRequest('lng must be between -180 and 180');
-  if (!Number.isFinite(radiusKm) || radiusKm <= 0 || radiusKm > 50) {
-    badRequest('radiusKm must be greater than 0 and no more than 50');
+  if (!Number.isFinite(radiusKm) || radiusKm !== defaultRadiusKm) {
+    badRequest(`radiusKm must be ${defaultRadiusKm} for this endpoint`);
   }
   return { lat, lng, radiusKm };
 }
