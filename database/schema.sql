@@ -1,8 +1,8 @@
--- Smart Lunch Route reference schema for a fresh database (TiDB/MySQL compatible).
--- This is an alternative to migrations 001-003, not a step to run before them.
--- In particular, is_simulated is already included here; migration 003 adds it
--- only to databases created from migration 001.
--- This file is intentionally idempotent and does not drop or seed data.
+-- Smart Lunch Route reference schema, aligned with the live TiDB database.
+-- Use for a fresh database instead of the migrations; do not run both paths.
+-- Includes the legacy deliveries table while it still exists in the database.
+-- CREATE TABLE IF NOT EXISTS does not reconcile an existing table's structure.
+-- This file does not drop or seed data.
 
 CREATE DATABASE IF NOT EXISTS smart_lunch_route
   DEFAULT CHARACTER SET utf8mb4
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   admin_user_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   username VARCHAR(100) NOT NULL,
   display_name VARCHAR(150) NULL,
-  password_hash VARCHAR(255) NOT NULL COMMENT 'bcrypt cost 10 hash only; never a plain-text password.',
+  password_hash VARCHAR(255) NOT NULL COMMENT 'Store a bcrypt/argon2 hash only; never a plain-text password.',
   role ENUM('OWNER','ADMIN') NOT NULL DEFAULT 'OWNER',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   last_login_at DATETIME NULL,
@@ -45,14 +45,15 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS riders (
   rider_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   rider_name VARCHAR(150) NOT NULL,
-  username VARCHAR(100) NULL,
   phone VARCHAR(30) NULL,
-  password_hash VARCHAR(255) NULL COMMENT 'bcrypt cost 10; null until owner sets a password.',
-  login_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  password_hash VARCHAR(255) NULL COMMENT 'Nullable because the current source only uses rider CRUD/job codes; fill when rider login is implemented.',
   is_available TINYINT(1) NOT NULL DEFAULT 1,
   status ENUM('ACTIVE','INACTIVE','SUSPENDED') NOT NULL DEFAULT 'ACTIVE',
+  max_box_capacity INT UNSIGNED NOT NULL DEFAULT 10,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  login_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  username VARCHAR(100) NULL,
     PRIMARY KEY (rider_id),
     UNIQUE KEY uq_riders_username (username),
   UNIQUE KEY uq_riders_phone (phone),
@@ -69,9 +70,9 @@ CREATE TABLE IF NOT EXISTS orders (
   assigned_at DATETIME NULL,
   delivered_at DATETIME NULL,
   cancelled_at DATETIME NULL,
-  is_simulated TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  is_simulated TINYINT(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (order_id),
   KEY idx_orders_customer (customer_id),
   KEY idx_orders_status_date (status, order_date),
@@ -82,7 +83,6 @@ CREATE TABLE IF NOT EXISTS orders (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS shop_settings (
-  stop_service_minutes INT NOT NULL DEFAULT 0,
   setting_id TINYINT UNSIGNED NOT NULL,
   shop_name VARCHAR(150) NOT NULL,
   latitude DECIMAL(10,7) NOT NULL,
@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS shop_settings (
   rider_cost_per_km DECIMAL(10,2) NOT NULL DEFAULT 2.00,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  stop_service_minutes INT NOT NULL DEFAULT 0,
   PRIMARY KEY (setting_id),
   CONSTRAINT chk_shop_settings_singleton CHECK (setting_id = 1),
   CONSTRAINT chk_shop_settings_latitude CHECK (latitude BETWEEN -90 AND 90),
@@ -107,7 +108,6 @@ CREATE TABLE IF NOT EXISTS shop_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS route_plans (
-  input_snapshot JSON NULL,
   route_plan_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   plan_date DATE NOT NULL,
   start_time TIME NOT NULL,
@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS route_plans (
   approximate TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  input_snapshot JSON NULL,
   PRIMARY KEY (route_plan_id),
   KEY idx_route_plans_date_status (plan_date, status),
   KEY idx_route_plans_status (status),
@@ -135,7 +136,6 @@ CREATE TABLE IF NOT EXISTS route_plans (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS delivery_jobs (
-  acknowledged_at DATETIME NULL, assigned_at DATETIME NULL,
   delivery_job_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   route_plan_id INT UNSIGNED NOT NULL,
   rider_id INT UNSIGNED NULL,
@@ -148,15 +148,17 @@ CREATE TABLE IF NOT EXISTS delivery_jobs (
   estimated_finish_time TIME NULL,
   delivery_cost DECIMAL(10,2) NULL,
   route_geometry JSON NULL COMMENT 'GeoJSON LineString from shop to ordered stops; coordinates are [lng, lat].',
-  status ENUM('WAITING','DELIVERING','COMPLETED') NOT NULL DEFAULT 'WAITING',
+  status ENUM('ASSIGNED','DELIVERING','DELIVERED','CANCELLED','WAITING','COMPLETED') NOT NULL DEFAULT 'ASSIGNED',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  acknowledged_at DATETIME NULL,
+  assigned_at DATETIME NULL,
   PRIMARY KEY (delivery_job_id),
   UNIQUE KEY uq_delivery_jobs_job_code (job_code),
   KEY idx_delivery_jobs_route_plan (route_plan_id),
   KEY idx_delivery_jobs_rider_status (rider_id, status),
   CONSTRAINT fk_delivery_jobs_route_plan FOREIGN KEY (route_plan_id) REFERENCES route_plans (route_plan_id) ON DELETE CASCADE,
-  CONSTRAINT fk_delivery_jobs_rider FOREIGN KEY (rider_id) REFERENCES riders (rider_id) ON DELETE RESTRICT,
+  CONSTRAINT fk_jobs_rider FOREIGN KEY (rider_id) REFERENCES riders (rider_id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT chk_delivery_jobs_totals CHECK (total_orders BETWEEN 0 AND 3 AND total_boxes >= 0),
   CONSTRAINT chk_delivery_jobs_distance_cost CHECK (
     (total_distance_km IS NULL OR total_distance_km >= 0) AND
@@ -173,10 +175,10 @@ CREATE TABLE IF NOT EXISTS delivery_job_orders (
   distance_from_previous_km DECIMAL(10,2) NULL,
   travel_time_from_previous_min INT UNSIGNED NULL,
   estimated_arrival_time TIME NULL,
-  leg_geometry JSON NULL COMMENT 'Road geometry from previous stop or shop to this order.',
   arrived_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  leg_geometry JSON NULL,
   PRIMARY KEY (delivery_job_order_id),
   UNIQUE KEY uq_delivery_job_orders_sequence (delivery_job_id, stop_sequence),
   UNIQUE KEY uq_delivery_job_orders_order (delivery_job_id, order_id),
@@ -190,6 +192,23 @@ CREATE TABLE IF NOT EXISTS delivery_job_orders (
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS deliveries (
+  id VARCHAR(40) NOT NULL,
+  rider_id INT UNSIGNED NOT NULL,
+  route_plan_id INT UNSIGNED NULL,
+  delivery_job_id INT UNSIGNED NULL,
+  status ENUM('ASSIGNED','DELIVERING','DELIVERED','CANCELLED') NOT NULL DEFAULT 'ASSIGNED',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_deliveries_rider (rider_id),
+  KEY idx_deliveries_route_plan (route_plan_id),
+  KEY idx_deliveries_job (delivery_job_id),
+  CONSTRAINT fk_deliveries_rider FOREIGN KEY (rider_id) REFERENCES riders (rider_id),
+  CONSTRAINT fk_deliveries_route_plan FOREIGN KEY (route_plan_id) REFERENCES route_plans (route_plan_id) ON DELETE SET NULL,
+  CONSTRAINT fk_deliveries_job FOREIGN KEY (delivery_job_id) REFERENCES delivery_jobs (delivery_job_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS auth_sessions (
   token_hash CHAR(64) NOT NULL PRIMARY KEY,
   actor_type ENUM('OWNER','RIDER') NOT NULL,
@@ -197,11 +216,11 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   expires_at DATETIME NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_auth_sessions_expiry (expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS auth_login_attempts (
   subject_hash CHAR(64) NOT NULL PRIMARY KEY,
   failed_count INT NOT NULL DEFAULT 0,
   window_started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   blocked_until DATETIME NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
