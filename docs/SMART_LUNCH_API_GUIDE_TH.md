@@ -2,7 +2,7 @@
 
 คู่มือสำหรับผู้พัฒนา ผู้ทดสอบ และผู้จัดทำเอกสารระบบจัดเส้นทางส่งข้าวกล่อง อ้างอิงโค้ดใน `src` ของ repository backend ที่ตรวจเมื่อ 7 ตุลาคม 2026 พฤติกรรมบนเซิร์ฟเวอร์จะตรงกับคู่มือนี้เมื่อ deploy โค้ดและ migration ที่สอดคล้องกัน
 
-โค้ดหลักที่อ้างอิงอยู่ใน repository [Fokkio/smart-lunch-routing-backend](https://github.com/Fokkio/smart-lunch-routing-backend) ที่ commit [`3ee7002`](https://github.com/Fokkio/smart-lunch-routing-backend/commit/3ee7002e678303487e48c8c5d7c4e938c15ad2f1) ลิงก์โค้ดในคู่มือระบุ commit นี้เพื่อให้ตรวจสอบพฤติกรรมย้อนหลังได้
+โค้ดหลักที่อ้างอิงอยู่ใน repository [Fokkio/smart-lunch-routing-backend](https://github.com/Fokkio/smart-lunch-routing-backend) ที่ commit [`eddf759`](https://github.com/Fokkio/smart-lunch-routing-backend/commit/eddf759fa07b31fceba4bcaa53cd01169cdfd58b) ซึ่งเป็น main ที่ fetch ก่อนเตรียม PR ลิงก์โค้ดในคู่มือระบุ commit นี้เพื่อให้ตรวจสอบพฤติกรรมย้อนหลังได้
 
 ตัวอย่าง ID บัญชี เบอร์โทร พิกัด และผลคำนวณในเอกสารเป็นข้อมูลสมมติ ไม่ใช่ข้อมูลจากเซิร์ฟเวอร์จริง
 
@@ -137,7 +137,7 @@ Session มีอายุ 12 ชั่วโมง หาก login ผิด 5 
 |---|---|---|---|
 | GET | `/api/customers` | 200 | ส่ง array ลูกค้าทั้งหมด |
 | GET | `/api/customers?search=คำค้น` | 200 | ค้นบางส่วนของชื่อ เบอร์โทร หรือที่อยู่ |
-| GET | `/api/customers/nearby?lat=...&lng=...&radiusKm=...` | 200 | ลูกค้าภายในรัศมี เรียงระยะใกล้ก่อน |
+| GET | `/api/customers/nearby?radiusKm=...` | 200 | ลูกค้าภายในรัศมีจากร้าน เรียงระยะใกล้ก่อน |
 | GET | `/api/customers/:id` | 200 | รายละเอียดลูกค้าหนึ่งราย |
 | POST | `/api/customers` | 201 | เพิ่มลูกค้า |
 | PUT | `/api/customers/:id` | 200 | แก้ไขเฉพาะฟิลด์ที่ส่งมา |
@@ -159,7 +159,7 @@ Session มีอายุ 12 ชั่วโมง หาก login ผิด 5 
 
 Response ใช้ฟิลด์ `id`, `name`, `phone`, `address`, `lat`, `lng` และอาจมี `createdAt` หาก PUT ไม่ส่ง address จะคงค่าเดิม; ส่ง `address: null` จะล้างที่อยู่
 
-Nearby ต้องส่ง `lat` และ `lng` ค่า `radiusKm` เริ่มต้น 1 กม. และรับค่ามากกว่า 0 ถึง 50 กม. ระยะที่ส่งใน `distanceKm` เป็นระยะเส้นตรงจาก Haversine ไม่ใช่ระยะถนน
+Nearby อ่านพิกัดร้านจาก settings ในฐานข้อมูล ไม่ใช้ `lat`/`lng` ที่ client ส่งมา ค่า `radiusKm` เริ่มต้น 1 กม. รับจำนวน finite มากกว่า 0 รวมทศนิยม และไม่มีเพดาน 50 กม. ใน validation รุ่นนี้ ระยะที่ส่งใน `distanceKm` เป็นระยะเส้นตรงจาก Haversine ไม่ใช่ระยะถนน
 
 ## 6. API ออเดอร์
 
@@ -169,13 +169,13 @@ Nearby ต้องส่ง `lat` และ `lng` ค่า `radiusKm` เร�
 |---|---|---|---|
 | GET | `/api/orders` | 200 | ส่ง array ออเดอร์ |
 | GET | `/api/orders?date=...&status=...&customerId=...` | 200 | กรองด้วยฟิลด์ที่ส่งมา; ใช้ร่วมกันได้ |
-| GET | `/api/orders/nearby?lat=...&lng=...&radiusKm=...` | 200 | ออเดอร์ที่ลูกค้าอยู่ในรัศมี |
+| GET | `/api/orders/nearby?radiusKm=...&date=...&status=...` | 200 | ออเดอร์ที่ลูกค้าอยู่ในรัศมีจากร้าน พร้อมตัวกรองวัน/สถานะ optional |
 | GET | `/api/orders/:id` | 200 | รายละเอียดออเดอร์ |
 | POST | `/api/orders` | 201 | เพิ่มออเดอร์ |
 | PUT | `/api/orders/:id` | 200 | แก้ไขออเดอร์ที่ยังแก้ไขได้ |
 | DELETE | `/api/orders/:id` | 204 | ลบออเดอร์ที่ไม่มีแผนอ้างอิง |
 | POST | `/api/orders/simulate` | 201 | สร้างออเดอร์จำลอง |
-| DELETE | `/api/orders/simulated` | 200 | ลบออเดอร์ที่มี `isSimulated: true` |
+| DELETE | `/api/orders/simulated` | 200 | ลบออเดอร์จำลองเฉพาะ ID ที่ส่งใน body |
 
 ตัวอย่าง body เพิ่มออเดอร์:
 
@@ -187,11 +187,11 @@ Nearby ต้องส่ง `lat` และ `lng` ค่า `radiusKm` เร�
 }
 ```
 
-`customerId` ต้องอ้างถึงลูกค้าที่มีอยู่ และ `boxes` เป็นจำนวนเต็ม 1–3 ค่าเริ่มต้นของสถานะคือ `PENDING` หากไม่ส่ง `orderDate` จะใช้วันที่ปัจจุบันตาม timezone ของ process เซิร์ฟเวอร์ จึงควรส่งวันที่ชัดเจนสำหรับงานตามวัน
+`customerId` ต้องอ้างถึงลูกค้าที่มีอยู่ และ `boxes` เป็นจำนวนเต็ม 1–3 การสร้างใหม่ใช้สถานะ `PENDING` เท่านั้น หากไม่ส่ง `orderDate` จะใช้วันที่ปัจจุบันตาม Asia/Bangkok การระบุวันที่ชัดเจนยังช่วยให้ทดสอบข้อมูลของวันเป้าหมายได้ตรงกัน
 
-Response ออเดอร์มี `id`, `customerId`, `boxes`, `status`, `orderDate`, `isSimulated` และอาจมี `createdAt` สถานะที่ยอมรับคือ `PENDING`, `PLANNED`, `DELIVERING`, `DELIVERED`, `CANCELLED` service แปลงสถานะที่ส่งมาเป็นตัวพิมพ์ใหญ่
+Response ออเดอร์มี `id`, `customerId`, `boxes`, `status`, `orderDate`, `isSimulated` และอาจมี `createdAt` สถานะที่อ่านได้คือ `PENDING`, `PLANNED`, `DELIVERING`, `DELIVERED`, `CANCELLED` ส่วน PUT เปลี่ยนได้เฉพาะ PENDING/CANCELLED และแก้ได้เมื่อออเดอร์เดิมอยู่ในสองสถานะนี้และไม่ติดแผนยืนยัน สถานะจัดส่งต้องเปลี่ยนผ่านใบงาน ระบบแปลง status ของ CRUD ปกติเป็นตัวพิมพ์ใหญ่
 
-Nearby มีรัศมีเริ่มต้น 2 กม. รับมากกว่า 0 ถึง 50 กม. และเพิ่ม `customerName`, `customerLat`, `customerLng`, `distanceKm` ในผลลัพธ์ Endpoint นี้ไม่ใช้ตัวกรอง date/status และค้นออเดอร์ทุกวันที่อยู่ในรัศมี
+Nearby ใช้พิกัดร้านจาก settings มีรัศมีเริ่มต้น 2 กม. รับจำนวน finite มากกว่า 0 และเพิ่ม `customerName`, `customerLat`, `customerLng`, `distanceKm` ในผลลัพธ์ หากไม่ส่งตัวกรองจะค้นทุกวัน/ทุกสถานะ กรองด้วย `date` และ `status` ได้ โดย status ของ endpoint นี้ต้องใช้ตัวพิมพ์ใหญ่ เช่น `PENDING` ไม่ใช้ `customerId` เป็นตัวกรองใน nearby
 
 ตัวอย่างจำลองออเดอร์:
 
@@ -201,7 +201,13 @@ Nearby มีรัศมีเริ่มต้น 2 กม. รับมา�
 
 `count` รับจำนวนเต็ม 20–30 ค่าเริ่มต้น 25 ระบบวนเลือกลูกค้าที่มีอยู่ตาม ID และวนจำนวนกล่อง 1, 2, 3 จึงเป็นข้อมูลจำลองแบบกำหนดลำดับ ไม่ได้สุ่มสร้างลูกค้าหรือพิกัดใหม่ หากยังไม่มีลูกค้าตอบ `422`
 
-Response จำลองเป็น `{"createdCount":25,"orders":[...]}` ส่วนการล้างข้อมูลจำลองตอบ `{"deletedCount":25}` การล้างไม่จำกัดวันและจะลบเฉพาะออเดอร์จำลอง หากมีแผนอ้างอิงจะตอบ `409` ให้ลบแผนที่เกี่ยวข้องก่อน
+Response จำลองเป็น `{"createdCount":25,"orders":[...]}` ส่วนการล้างข้อมูลจำลองต้องส่ง body ระบุ ID:
+
+```json
+{ "orderIds": [101, 102, 103] }
+```
+
+รับ ID จำนวน 1–500 รายการ เป็นจำนวนเต็มบวกและไม่ซ้ำ ตอบ `{"deletedCount":3}` ตามจำนวนที่ลบจริง ลบเฉพาะ ID ที่เป็นออเดอร์จำลอง ไม่จำกัดวัน หากมีแผนอ้างอิงจะตอบ `409` ให้ลบแผนที่เกี่ยวข้องก่อน
 
 ## 7. API ไรเดอร์
 
@@ -277,7 +283,7 @@ OWNER เรียก `GET /api/settings` เพื่ออ่าน และ 
 | POST | `/api/route-plans/:id/select` | 200 | ยืนยันและมอบหมายแผน |
 | DELETE | `/api/route-plans/:id` | 204 | ลบแผนและใบงาน/จุดส่งของแผนนั้น |
 
-Body สำหรับ generate และ recalculate:
+Body สำหรับ generate:
 
 ```json
 {
@@ -290,7 +296,13 @@ Body สำหรับ generate และ recalculate:
 
 บังคับ `planDate` ส่วนอีกสามฟิลด์เป็น optional หากไม่ส่งเวลาใช้ settings ร้าน หากไม่ส่ง `orderIds` ใช้ออเดอร์ PENDING ทั้งหมดของวันนั้น ถ้าส่ง orderIds ต้องไม่ว่าง ไม่ซ้ำ เป็นจำนวนเต็มบวก และทุก ID ต้องยังเป็น PENDING ของวันที่ระบุ เวลาเริ่มต้องก่อน deadline ในวันเดียวกัน
 
-ทุกครั้งที่ generate/recalculate สำเร็จสร้าง routePlanId ใหม่ ไม่เขียนทับแผนเดิม Recalculate ใช้ `seedOffset: 1` จึงอาจได้ผลเดิมเมื่อเรียกซ้ำด้วยข้อมูลเดิม และอาจตรงกับแผนปกติในบางชุดข้อมูล
+Recalculate ต้องส่ง `basePlanId` ของแผน GENERATED ปัจจุบันที่มี planDate ตรงกัน:
+
+```json
+{ "planDate": "2026-10-07", "basePlanId": 7 }
+```
+
+ส่ง startTime/deadline/orderIds เพิ่มเพื่อปรับรอบได้ หากไม่ส่งใช้เวลาและออเดอร์จากแผนฐาน ทุกครั้งที่ generate/recalculate สำเร็จสร้าง routePlanId ใหม่ ไม่เขียนทับแผนเดิม Recalculate ค้นทางเลือกที่ลำดับ/กลุ่มจุดส่งต่างจากแผนฐาน ภายในขอบเขตการค้นที่กำหนด หากหาไม่ได้ตอบ `422` จึงไม่ควรเขียนว่าได้แผนทางเลือกเสมอ หรือว่าผลใหม่ต้องถูกกว่าเดิม หากส่ง basePlanId เดิมซ้ำอาจได้ทางเลือกเดิมอีกครั้ง
 
 รายการสรุปมีข้อมูลต่อไปนี้ แต่ไม่มี `jobs`:
 
@@ -345,16 +357,16 @@ Geometry เป็น GeoJSON LineString หรือ null ถ้าไม่ม
 
 | Method | Path | ผลสำเร็จ | รายละเอียด |
 |---|---|---|---|
-| GET | `/api/my-jobs?date=YYYY-MM-DD` | 200 | งานของไรเดอร์ในแผน SELECTED ของวันที่ระบุ |
+| GET | `/api/my-jobs?date=YYYY-MM-DD` | 200 | งาน SELECTED ของวันที่ระบุ และงานค้างจากวันก่อนหน้า ของไรเดอร์บัญชีนั้น |
 | POST | `/api/my-jobs/:jobId/acknowledge` | 200 | รับทราบงาน; ตอบ `{"acknowledged":true}` |
 | POST | `/api/my-jobs/:jobId/start` | 200 | เริ่มส่ง; ตอบ `{"started":true}` |
 | POST | `/api/my-jobs/:jobId/stops/:orderId/deliver` | 200 | ส่งจุดนั้นสำเร็จ; ตอบ `{"delivered":true}` |
 
-ต้องส่ง date ตอนอ่านงาน ไม่ส่งหรือวันที่ผิดตอบ `400` ผลลัพธ์เป็น array แต่ละรายการมี `planId`, `job` และ `shop` สำหรับพิกัดร้านกับ deadline ไม่มี endpoint ที่ใช้ jobCode อย่างเดียวเพื่อ login หรืออ่านงานสาธารณะ
+ต้องส่ง date ตอนอ่านงาน ไม่ส่งหรือวันที่ผิดตอบ `400` ผลลัพธ์เป็น array แต่ละรายการมี `planId`, `job` และ `shop` ซึ่งให้ชื่อร้าน พิกัด เวลาเริ่ม และ deadline งานวันก่อนหน้าจะแสดงเมื่อยังมีออเดอร์ PLANNED/DELIVERING ไม่มี endpoint ที่ใช้ jobCode อย่างเดียวเพื่อ login หรืออ่านงานสาธารณะ
 
 ก่อน start ต้อง acknowledge ก่อน ไม่เช่นนั้นตอบ `409` เมื่อ start จะเปลี่ยนใบงานเป็น DELIVERING และออเดอร์ PLANNED ในงานนั้นเป็น DELIVERING
 
-ก่อน deliver ต้องรับทราบงาน และส่งจุดก่อนหน้าให้ครบ ระบบยอมรับออเดอร์ PLANNED หรือ DELIVERING จึงไม่ได้บังคับว่าต้องเรียก start ก่อน deliver ในระดับ API แม้ลำดับการใช้งานปกติควร start ก่อน
+ก่อน deliver ต้องรับทราบงาน เริ่มงานให้ใบงานและออเดอร์เป็น DELIVERING และส่งจุดก่อนหน้าให้ครบ หากยังไม่ start ตอบ `409` ใบงานที่ CANCELLED ไม่สามารถรับทราบหรือเริ่มส่งได้
 
 Deliver ออเดอร์ที่ส่งแล้วซ้ำตอบสำเร็จโดยไม่เปลี่ยนซ้ำ ส่งข้ามลำดับตอบ `409` เมื่อส่งครบงานเปลี่ยนเป็น COMPLETED แต่ route plan ยังคง SELECTED ไม่มีสถานะ COMPLETED สำหรับตัวแผน
 
@@ -368,15 +380,15 @@ Deliver ออเดอร์ที่ส่งแล้วซ้ำตอบส
 4. แบ่งกลุ่มออเดอร์ด้วย farthest-point seeds และนำออเดอร์ที่เหลือไปกลุ่มใกล้ seed ที่ยังมีที่ว่าง นี่เป็น heuristic ไม่ได้ค้นทุกวิธีแบ่งกลุ่ม
 5. ในแต่ละกลุ่มทดลองทุกลำดับจุดส่ง 1–3 จุด เลือกเวลารวมต่ำสุด หากเวลาเท่ากันเลือกระยะต่ำสุด แล้วใช้ลำดับ ID เป็นตัวตัดสิน
 6. ตรวจเวลาเดินทางรวมเวลาบริการของทุกจุด ถ้ามีงานเลย deadline จะเพิ่มจำนวนไรเดอร์และคำนวณกลุ่มใหม่ จนถึงจำนวนไรเดอร์พร้อมหรือจำนวนออเดอร์
-7. ถ้าไม่มีแผนทันเวลาตอบ `422` หากมีแผนจะขอ geometry ตามลำดับจุดส่งของแต่ละงาน
-8. ตรวจว่าออเดอร์ครบ ไม่ซ้ำ ทุกใบงานมี 1–3 ออเดอร์ และทันกำหนด แล้วคำนวณต้นทุน
+7. หากวิธีแบ่งกลุ่มเบื้องต้นหาแผนไม่ได้ จะค้นเพิ่มเติมด้วยการเปลี่ยน seed สลับออเดอร์ หรือย้ายระหว่างกลุ่ม โดยจำกัดจำนวนรูปแบบประมาณ 5,000 และเลือกรูปแบบที่ทันเวลาซึ่งมีค่าส่งต่ำสุดในชุดที่ค้น เวลาเสร็จและ signature ใช้ตัดสินเมื่อค่าส่งเท่ากัน Recalculate ใช้การค้นนี้เพื่อหลีกเลี่ยงแผนฐาน
+8. ขอ geometry และค่าระยะทาง/เวลาของแต่ละ leg จาก OSRM Route แล้วใช้ค่า leg ที่ครบในการตรวจ deadline และต้นทุนสุดท้าย หากแผนไม่ผ่าน จะลองรูปแบบอื่นได้สูงสุด 10 รอบตรวจเส้นทาง หากยังหาไม่ได้ตอบ `422` ก่อนบันทึกต้องตรวจว่าออเดอร์ครบ ไม่ซ้ำ ทุกใบงานมี 1–3 ออเดอร์ และทันกำหนด
 9. ตรวจข้อมูล snapshot อีกครั้งและบันทึกแผน ใบงาน และจุดส่งใน transaction เดียว
 
 เส้นทางคิดจากร้าน → จุดส่งแรก → จุดถัดไป → จุดสุดท้าย ไม่รวมระยะกลับร้าน ค่า deadline ใช้เวลาเสร็จรวมเวลาบริการทุกจุด ทันเวลาเมื่อ `finish <= deadline` ตรวจด้วยความละเอียดระดับวินาทีก่อนบันทึก ผลลัพธ์เวลาแสดงเป็น HH:MM และ duration บางส่วนปัดเป็นนาทีเมื่อเก็บในฐานข้อมูล
 
 เมื่อ OSRM Table ใช้ไม่ได้ ระบบใช้ Haversine ระยะเส้นตรง ตั้ง `routingSource: "HAVERSINE"` และ `approximate: true` เวลา fallback คิด `ระยะทาง / riderSpeedKmh × 60` ส่วนเวลา ROAD ใช้ข้อมูล OSRM โดยตรง ไม่ได้คำนวณทุกกรณีด้วย 30 กม./ชม.
 
-หากขอ geometry ไม่สำเร็จ geometry เป็น null ได้แม้ตารางระยะทางก่อนหน้านั้นเป็น ROAD จึงควรตรวจ geometry แยกจาก approximate ค่า fallbackReason มีในข้อมูลระหว่างคำนวณ แต่ไม่ได้เก็บ/ส่งกลับครบทุกเส้นทางอ่านข้อมูล จึงไม่ควรบังคับว่าทุก response ต้องมีฟิลด์นี้
+หาก OSRM Route ไม่สำเร็จหรือค่า leg ไม่ครบ ระบบใช้ค่าจาก matrix เป็นทางสำรอง ไม่มี geometry และกำหนด approximate สำหรับงานนั้นเป็น true ดังนั้น plan อาจมี `routingSource: "ROAD"` พร้อม `approximate: true` เมื่อใช้ ROAD matrix สำรอง หาก Route สำเร็จครบทุกงาน ผลสุดท้ายใช้ค่า ROAD จาก Route แม้ matrix ก่อนหน้านั้นเคย fallback จึงควรอ่านทั้ง routingSource, approximate และ geometry ค่า fallbackReason ไม่ได้เก็บ/ส่งกลับครบทุกเส้นทางอ่านข้อมูล จึงไม่ควรบังคับว่าทุก response ต้องมีฟิลด์นี้
 
 สูตรใช้ค่าจาก settings:
 
@@ -390,7 +402,7 @@ Deliver ออเดอร์ที่ส่งแล้วซ้ำตอบส
 
 ตัวอย่าง 6 กล่อง ระยะ 2 กม. ใช้ค่า 65/40/15/2: รายได้ 390 บาท ต้นทุนอาหาร 240 บาท ค่าส่ง `15 + 2 × 2 × 6 = 39` บาท กำไร 111 บาท จำนวนกล่องใช้คิดเงิน แต่ความจุไรเดอร์นับจำนวนออเดอร์
 
-ระบบไม่ได้เลือกแผนด้วยเป้าหมายกำไรสูงสุด และไม่ได้รับประกันว่าแผนที่สร้างมีกำไรเสมอ หากต้นทุนสูง ผลกำไรติดลบได้
+Generate ใช้แผนที่ผ่านข้อจำกัดจากการค้นแบบ heuristic ส่วนการค้นทางเลือกเปรียบเทียบค่าส่งในชุดรูปแบบที่ค้น ระบบไม่ได้รับประกันต้นทุนต่ำสุดทั้งระบบหรือกำไรเป็นบวก หากต้นทุนสูง ผลกำไรติดลบได้
 
 ## 12. สถานะข้อมูลและการป้องกันข้อมูลเปลี่ยนระหว่างทำงาน
 
@@ -407,6 +419,9 @@ Deliver ออเดอร์ที่ส่งแล้วซ้ำตอบส
 | ใบงาน | WAITING | รอส่ง; การรับทราบเก็บแยกใน acknowledgedAt |
 | ใบงาน | DELIVERING | กำลังส่ง |
 | ใบงาน | COMPLETED | ส่งครบแล้ว |
+| ใบงาน | CANCELLED | งานถูกยกเลิก; เริ่มหรือรับทราบไม่ได้ |
+
+Response แปลงสถานะใบงานเก่า ASSIGNED เป็น WAITING และ DELIVERED เป็น COMPLETED เพื่อให้ client ใช้ชื่อสถานะเดียวกัน
 
 การแก้ลูกค้าหรือออเดอร์ที่อยู่ในฉบับร่างทำให้ฉบับร่างที่เกี่ยวข้องเป็น REJECTED การแก้ข้อมูลที่ผูกกับแผนยืนยันถูกป้องกันด้วย `409` สำหรับลูกค้าที่ส่งครบแล้วและแผนมี snapshot โค้ดยอมให้แก้ข้อมูลลูกค้าได้ โดยแผนเก่าใช้ snapshot เดิม ส่วนออเดอร์ในแผนยืนยันยังถูกป้องกัน
 
@@ -427,7 +442,7 @@ Deliver ออเดอร์ที่ส่งแล้วซ้ำตอบส
 | 403 | บทบาทไม่ตรง หรือ origin ถูก CORS ปฏิเสธ | ใช้บัญชีที่มีสิทธิ์/ตรวจ CORS |
 | 404 | ไม่พบข้อมูล งานไม่ใช่ของไรเดอร์ หรือแผนไม่อยู่ในสถานะเลือกได้ | โหลดข้อมูลใหม่และตรวจ ID |
 | 409 | เบอร์/username ซ้ำ ข้อมูลแผนเปลี่ยน ไรเดอร์ไม่พร้อม ส่งข้ามจุด หรือลบข้อมูลที่ถูกอ้างอิง | แก้ข้อขัดแย้งหรือคำนวณใหม่ |
-| 422 | ไม่มีออเดอร์ ไม่มีลูกค้าสำหรับจำลอง ไรเดอร์ไม่พอ ไม่มีแผนทันเวลา หรือแผนไม่มีผู้รับงานพร้อมครบ | เตรียมข้อมูล/ไรเดอร์และลองใหม่ |
+| 422 | ไม่มีออเดอร์ ไม่มีลูกค้าสำหรับจำลอง ไรเดอร์ไม่พอ ไม่มีแผนทันเวลาภายในขอบเขตค้น ไม่มีทางเลือกที่ต่างจากแผนฐาน หรือแผนไม่มีผู้รับงานพร้อมครบ | เตรียมข้อมูล/ไรเดอร์ ปรับรอบหรือใช้แผนเดิม |
 | 429 | login ล้มเหลวมากเกินกำหนด | รอให้พ้นเวลาบล็อก |
 | 503 | ตั้งค่า database ไม่ครบเมื่อคำขอเข้าถึง DB | ตั้งค่า environment ฝั่ง backend |
 | 500 | ข้อผิดพลาดอื่น เช่น database query/connection หรือ schema ไม่สอดคล้อง | ตรวจ log และ migration ฝั่ง server |
@@ -446,7 +461,7 @@ Error handler ปิดรายละเอียดภายในสำหร
 4. POST rider และ PUT account เพื่อเตรียมผู้รับงาน ตรวจ GET riders?available=true ว่าไรเดอร์พร้อม
 5. POST generate ด้วย planDate และตรวจว่า jobs ครอบคลุมออเดอร์ครบ ไม่มี ID ซ้ำ แต่ละ job ไม่เกิน 3 ออเดอร์
 6. ตรวจสูตรรายได้ อาหาร ค่าส่ง และกำไรจาก response พร้อมตรวจ routingSource/approximate/geometry
-7. POST recalculate และตรวจว่าได้ routePlanId ใหม่ โดยไม่ตั้งเงื่อนไขว่าการแบ่งกลุ่มต้องต่างทุกครั้ง
+7. POST recalculate พร้อม basePlanId และตรวจว่าได้ routePlanId ใหม่กับรูปแบบจุดส่งที่ต่างจากฐาน หรือ 422 เมื่อไม่มีทางเลือกที่หาได้ การเปลี่ยนเฉพาะ riderId ไม่ถือเป็นเส้นทางทางเลือก
 8. POST select ด้วย routePlanId และอ่านออเดอร์อีกครั้งว่ากลายเป็น PLANNED
 9. Login RIDER แล้ว GET my-jobs ของวันนั้น ตรวจว่าเห็นเฉพาะงานของตน
 10. POST acknowledge → start → deliver จุดแรกจนถึงจุดสุดท้าย แล้ว GET งานอีกครั้งว่าครบและเป็น COMPLETED
@@ -463,28 +478,28 @@ Error handler ปิดรายละเอียดภายในสำหร
 - API คืน geometry และข้อมูลจุดส่ง การแสดงสีเส้นทาง ขนาดแผนที่ หน้าจอมือถือ และลิงก์นำทางเป็นงานของ frontend
 - การสร้างแผนต้องมีไรเดอร์พร้อมเพียงพอ ระบบไม่ได้สร้างบัญชีไรเดอร์เพิ่มให้อัตโนมัติ
 - วันเดียวเลือกได้หลายรอบที่ไม่แย่งออเดอร์หรือไรเดอร์งานค้าง คำอธิบายเก่าใน docs/routing-pipeline.md ที่ระบุเลือกได้เพียงแผนเดียวต่อวันไม่ตรงโค้ดปัจจุบัน
-- วันที่ที่ไม่ส่งในคำขอสร้างออเดอร์ใช้ timezone ของ server ขณะที่รายการ workload ไรเดอร์ใช้ Asia/Bangkok ควรระบุวันที่ชัดเจนในคำขอสำหรับทดสอบและจัดส่ง
+- วันที่ปัจจุบันของการสร้างออเดอร์และ workload ไรเดอร์ใช้ Asia/Bangkok การระบุวันที่ชัดเจนในคำขอช่วยทดสอบวันเป้าหมายโดยไม่ขึ้นกับเวลาที่รันทดสอบ
 - การรัน server.ts ต้องมี environment ของ database ครบ มิฉะนั้น process ออกจากการทำงานก่อนเปิดพอร์ต ส่วน Express app ที่ถูก import โดยตรงมี root/health ที่ไม่พึ่งฐานข้อมูล
 
 ## 16. ไฟล์อ้างอิงสำหรับปรับปรุงคู่มือ
 
 | เรื่อง | แหล่งอ้างอิง |
 |---|---|
-| การ mount endpoint และสิทธิ์ | [app.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/app.ts) |
-| Login, token, password, role | [auth.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/middleware/auth.ts), [auth.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/routes/auth.routes.ts) |
-| เส้นทางลูกค้าและออเดอร์ | [customer.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/routes/customer.routes.ts), [order.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/routes/order.routes.ts) |
-| ตรวจข้อมูลลูกค้า/ออเดอร์ | [customer.service.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/services/customer.service.ts), [order.service.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/services/order.service.ts) |
-| Nearby และจำลองออเดอร์ | [request-validation.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/controllers/request-validation.ts), [order.model.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/models/order.model.ts) |
-| ไรเดอร์และบัญชี | [rider.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/routes/rider.routes.ts), [rider.model.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/models/rider.model.ts) |
-| Settings | [settings.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/routes/settings.routes.ts), [shop-settings-validation.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/services/shop-settings-validation.ts) |
-| ขั้นตอนวางแผน | [route-planning.service.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/services/route-planning.service.ts) |
-| แบ่งกลุ่ม/เรียงจุด | [order-clusterer.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/domain/delivery/order-clusterer.ts), [route-sequencer.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/domain/routing/route-sequencer.ts) |
-| ตรวจเวลา/คำนวณต้นทุน | [deadline-rule.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/domain/delivery/deadline-rule.ts), [cost-calculator.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/domain/delivery/cost-calculator.ts) |
-| Response ของแผน | [route-plan.types.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/domain/routing/route-plan.types.ts) |
-| บันทึก เลือก ลบ ส่งสำเร็จ | [route-plan.model.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/models/route-plan.model.ts) |
-| Snapshot และล็อกข้อมูล | [plan-inputs.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/models/plan-inputs.ts) |
-| งานของไรเดอร์ | [rider-job.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/routes/rider-job.routes.ts) |
-| OSRM และ fallback | [osrm-matrix.provider.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/infrastructure/routing/osrm-matrix.provider.ts), [fallback-routing.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/infrastructure/routing/fallback-routing.ts) |
-| Database และ error | [mysql.connection.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/database/mysql.connection.ts), [error-handler.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/3ee7002e678303487e48c8c5d7c4e938c15ad2f1/src/middleware/error-handler.ts) |
+| การ mount endpoint และสิทธิ์ | [app.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/app.ts) |
+| Login, token, password, role | [auth.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/middleware/auth.ts), [auth.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/routes/auth.routes.ts) |
+| เส้นทางลูกค้าและออเดอร์ | [customer.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/routes/customer.routes.ts), [order.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/routes/order.routes.ts) |
+| ตรวจข้อมูลลูกค้า/ออเดอร์ | [customer.service.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/services/customer.service.ts), [order.service.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/services/order.service.ts) |
+| Nearby และจำลองออเดอร์ | [request-validation.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/controllers/request-validation.ts), [order.model.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/models/order.model.ts) |
+| ไรเดอร์และบัญชี | [rider.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/routes/rider.routes.ts), [rider.model.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/models/rider.model.ts) |
+| Settings | [settings.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/routes/settings.routes.ts), [shop-settings-validation.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/services/shop-settings-validation.ts) |
+| ขั้นตอนวางแผน | [route-planning.service.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/services/route-planning.service.ts) |
+| แบ่งกลุ่ม/เรียงจุด | [order-clusterer.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/domain/delivery/order-clusterer.ts), [route-sequencer.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/domain/routing/route-sequencer.ts) |
+| ตรวจเวลา/คำนวณต้นทุน | [deadline-rule.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/domain/delivery/deadline-rule.ts), [cost-calculator.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/domain/delivery/cost-calculator.ts) |
+| Response ของแผน | [route-plan.types.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/domain/routing/route-plan.types.ts) |
+| บันทึก เลือก ลบ ส่งสำเร็จ | [route-plan.model.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/models/route-plan.model.ts) |
+| Snapshot และล็อกข้อมูล | [plan-inputs.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/models/plan-inputs.ts) |
+| งานของไรเดอร์ | [rider-job.routes.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/routes/rider-job.routes.ts) |
+| OSRM และ fallback | [osrm-matrix.provider.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/infrastructure/routing/osrm-matrix.provider.ts), [fallback-routing.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/infrastructure/routing/fallback-routing.ts) |
+| Database และ error | [mysql.connection.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/database/mysql.connection.ts), [error-handler.ts](https://github.com/Fokkio/smart-lunch-routing-backend/blob/eddf759fa07b31fceba4bcaa53cd01169cdfd58b/src/middleware/error-handler.ts) |
 
 เมื่อ API เปลี่ยน ให้ตรวจ route ที่ mount จริง, body validation, response mapping และ model transaction ก่อนปรับคู่มือ TypeScript type และ README ช่วยค้นข้อมูลได้ แต่พฤติกรรมที่ส่งกลับจริงขึ้นกับ route/controller/model ในโค้ด
