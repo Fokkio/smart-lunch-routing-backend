@@ -125,6 +125,8 @@ Health check: `GET http://localhost:3000/api/health`
 - `POST /api/route-plans/:id/select` → SELECTED + orders move PENDING → PLANNED
 - `POST /api/auth/login` creates an owner or rider session; `GET /api/auth/me` checks it; `POST /api/auth/logout` revokes it.
 - `PUT /api/auth/password` lets a signed-in rider change their own password.
+- `GET /api/auth/owner-account` returns only the signed-in owner's username.
+- `PUT /api/auth/owner-account` changes the signed-in owner's username and/or password. Body: `currentPassword` plus optional `username` and `newPassword`; at least one change is required. It verifies the current password, locks the active owner row, updates only supplied fields, and revokes all sessions for that owner in the same transaction. Duplicate usernames return 409; an incorrect current password returns 401. Passwords use the existing bcrypt policy (at least 12 characters, at most 72 UTF-8 bytes). Deploy this endpoint before the new settings UI; no additional migration is needed.
 - `GET /api/my-jobs?date=YYYY-MM-DD` returns only the signed-in rider's selected jobs.
 - `POST /api/my-jobs/:jobId/stops/:orderId/deliver` checks rider ownership inside the delivery transaction.
 - `PUT /api/riders/:id/password` lets an owner set or reset a rider password.
