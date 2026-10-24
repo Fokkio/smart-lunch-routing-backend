@@ -30,7 +30,11 @@ describe('audit fix regressions without real DB writes', () => {
   });
   it('requires an explicit clear scope and never clears real orders', async () => {
     await expect(OrderService.deleteSimulated([])).rejects.toMatchObject({ statusCode: 400 });
-    sql.mockResolvedValue([{ affectedRows: 2 }, []]);
+    sql.mockImplementation(async query => query.includes('is_simulated=TRUE') && query.includes('FOR UPDATE')
+      ? [[{ order_id: 7 }, { order_id: 9 }], []]
+      : query.startsWith('DELETE FROM orders')
+        ? [{ affectedRows: 2 }, []]
+        : [[], []]);
     await expect(OrderService.deleteSimulated([7, 9])).resolves.toBe(2);
     expect(sql).toHaveBeenCalledWith('DELETE FROM orders WHERE is_simulated=TRUE AND order_id IN (?,?)', [7, 9]);
   });

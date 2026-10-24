@@ -1,4 +1,4 @@
-import { type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
+import { type PoolConnection, type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
 import { getPool, withTransaction } from '../database/mysql.connection';
 import { toISODate, todayLocal } from './dates';
 import { guardPlanEdit, lockPlanning } from './plan-inputs';
@@ -141,9 +141,29 @@ export class OrderModel {
     return rows.map(map);
   }
 
+  /**
+   * ล้างออเดอร์จำลองเป็นชุดแบบ all-or-nothing
+   * รอบที่ยืนยันแล้ว (SELECTED) ยังห้ามลบ (409) แต่รอบฉบับร่าง (GENERATED/REJECTED)
+   * ที่อ้างถึงจะถูกล้างซ้ำอัตโนมัติ เส้นทางร่างจะถูกคำนวณใหม่อยู่แล้ว
+   */
   static async deleteSimulated(orderIds: number[]): Promise<number> {
-    const [result] = await getPool().execute<ResultSetHeader>(`DELETE FROM orders WHERE is_simulated=TRUE AND order_id IN (${orderIds.map(() => '?').join(',')})`, orderIds);
-    return result.affectedRows;
+    return withTransaction(async (conn) => {
+      await lockPlanning(conn);
+      const placeholders = orderIds.map(() => '?').join(',');
+      const [existing] = await conn.execute<Row[]>(
+        `SELECT * FROM orders WHERE is_simulated=TRUE AND order_id IN (${placeholders}) FOR UPDATE`,
+        orderIds,
+      );
+      const existingIds = existing.map(row => row.order_id);
+      if (!existingIds.length) return 0;
+      await guardConfirmedPlanReference(conn, existingIds);
+      await discardDraftReferences(conn, existingIds);
+      const [result] = await conn.execute<ResultSetHeader>(
+        `DELETE FROM orders WHERE is_simulated=TRUE AND order_id IN (${existingIds.map(() => '?').join(',')})`,
+        existingIds,
+      );
+      return result.affectedRows;
+    });
   }
 
   static async update(id: string, input: Partial<OrderInput>): Promise<Order | null> {
@@ -162,8 +182,56 @@ export class OrderModel {
     return this.findById(id);
   }
 
+  /**
+   * ลบออเดอร์รายการเดียว: ล้างการอ้างอิงจากรอบฉบับร่าง (GENERATED/REJECTED)
+   * ที่อ้างถึงให้ก่อน — รอบเหล่านี้ถูกคำนวณใหม่อยู่แล้ว — แต่ยังห้ามลบ
+   * ออเดอร์ที่อยู่ในรอบที่ยืนยันแล้ว (SELECTED) เพื่อรักษาประวัติการจัดส่ง
+   */
   static async delete(id: string): Promise<boolean> {
-    const [result] = await getPool().execute<ResultSetHeader>('DELETE FROM orders WHERE order_id=?', [id]);
-    return result.affectedRows > 0;
+    return withTransaction(async (conn) => {
+      await lockPlanning(conn);
+      const [orderRows] = await conn.execute<Row[]>('SELECT * FROM orders WHERE order_id=? FOR UPDATE', [id]);
+      if (!orderRows[0]) return false;
+      await guardConfirmedPlanReference(conn, [Number(id)]);
+      await discardDraftReferences(conn, [Number(id)]);
+      const [result] = await conn.execute<ResultSetHeader>('DELETE FROM orders WHERE order_id=?', [id]);
+      return result.affectedRows > 0;
+    });
   }
+}
+
+/** ออเดอร์ที่อยู่ในแผนยืนยันแล้วจะลบไม่ได้ — ตอบ 409 ตามเดิม */
+async function guardConfirmedPlanReference(conn: PoolConnection, orderIds: number[]): Promise<void> {
+  const placeholders = orderIds.map(() => '?').join(',');
+  const [rows] = await conn.execute<RowDataPacket[]>(
+    `SELECT 1 FROM route_plans rp
+     JOIN delivery_jobs dj ON dj.route_plan_id=rp.route_plan_id
+     JOIN delivery_job_orders djo ON djo.delivery_job_id=dj.delivery_job_id
+     WHERE djo.order_id IN (${placeholders}) AND rp.status='SELECTED' LIMIT 1`,
+    orderIds,
+  );
+  if (rows.length) {
+    throw Object.assign(new Error('Cannot delete order that is part of a delivery plan'), {
+      statusCode: 409,
+    });
+  }
+}
+
+/** ล้างการอ้างอิงของออเดอร์ออกจากรอบฉบับร่าง และตัดใบงานร่างที่เหลือ 0 ออเดอร์ทิ้ง */
+async function discardDraftReferences(conn: PoolConnection, orderIds: number[]): Promise<void> {
+  const placeholders = orderIds.map(() => '?').join(',');
+  await conn.execute(
+    `DELETE djo FROM delivery_job_orders djo
+     JOIN delivery_jobs dj ON dj.delivery_job_id=djo.delivery_job_id
+     JOIN route_plans rp ON rp.route_plan_id=dj.route_plan_id
+     WHERE djo.order_id IN (${placeholders}) AND rp.status IN ('GENERATED','REJECTED')`,
+    orderIds,
+  );
+  await conn.execute(
+    `DELETE dj FROM delivery_jobs dj
+     JOIN route_plans rp ON rp.route_plan_id=dj.route_plan_id
+     WHERE rp.status IN ('GENERATED','REJECTED')
+       AND NOT EXISTS (SELECT 1 FROM delivery_job_orders djo WHERE djo.delivery_job_id=dj.delivery_job_id)`,
+    [],
+  );
 }
