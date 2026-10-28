@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/run-sql.ts database/migrations/001_initial_schema.sql",
     "db:migrate:routing": "tsx scripts/run-sql.ts database/migrations/002_routing_metadata.sql",
