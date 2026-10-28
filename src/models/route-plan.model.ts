@@ -442,20 +442,23 @@ export class RoutePlanModel {
       if (!plans[0]) return false;
       if (draftOnly && plans[0].status === 'SELECTED') return false;
       if (plans[0].status === 'SELECTED') {
-        const [delivered] = await conn.execute<(RowDataPacket & { count: number })[]>(
+        // A completed plan may still be deleted (order DELIVERED statuses are
+        // kept as history); only block a round whose deliveries are in flight.
+        const [delivering] = await conn.execute<(RowDataPacket & { count: number })[]>(
           `SELECT COUNT(*) AS count FROM delivery_job_orders djo
            JOIN delivery_jobs dj ON dj.delivery_job_id=djo.delivery_job_id
            JOIN orders o ON o.order_id=djo.order_id
-           WHERE dj.route_plan_id=? AND o.status='DELIVERED'`,
+           WHERE dj.route_plan_id=? AND o.status='DELIVERING'`,
           [routePlanId],
         );
-        if (Number(delivered[0]?.count ?? 0) > 0) {
-          throw Object.assign(new Error('A plan with completed deliveries cannot be deleted'), {
-            statusCode: 409,
-          });
+        if (Number(delivering[0]?.count ?? 0) > 0) {
+          throw Object.assign(
+            new Error('A plan with deliveries in progress cannot be deleted'),
+            { statusCode: 409 },
+          );
         }
         await conn.execute(
-          `UPDATE orders SET status = 'PENDING' WHERE status IN ('PLANNED','DELIVERING') AND order_id IN
+          `UPDATE orders SET status = 'PENDING' WHERE status = 'PLANNED' AND order_id IN
            (SELECT order_id FROM delivery_job_orders WHERE delivery_job_id IN
             (SELECT delivery_job_id FROM delivery_jobs WHERE route_plan_id = ?))`,
           [routePlanId],
