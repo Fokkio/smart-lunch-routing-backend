@@ -1,6 +1,8 @@
+// ไฟล์นี้: อ่านค่าตั้งต้นจาก .env เช่น port ฐานข้อมูล OSRM และตรวจว่าค่าที่จำเป็นครบไหม
 import fs from 'node:fs';
 import 'dotenv/config';
 
+// อ่านตัวแปรแวดล้อมตามชื่อ ตัดช่องว่างทิ้ง ค่าว่างถือว่าไม่มีค่า
 const value = (name: string): string | undefined => process.env[name]?.trim() || undefined;
 const port = Number(process.env['PORT'] ?? 3000);
 const dbPort = Number(process.env['DB_PORT'] ?? NaN);
@@ -23,6 +25,7 @@ const REQUIRED_DB_VARS = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NA
  * localhost fallback: blank values fail validation instead of silently
  * connecting somewhere unintended.
  */
+// ตรวจ config ฐานข้อมูล: คืนข้อความชื่อตัวแปรที่ขาด (ไม่พิมพ์ค่าลับ) หรือ null ถ้าครบ
 export function databaseConfigError(
   dependencies: { fileExists?: (path: string) => boolean } = {},
 ): string | null {
@@ -45,6 +48,7 @@ export function databaseConfigError(
   return lines.length ? lines.join('\n') : null;
 }
 
+// บอกสั้น ๆ ว่า config ฐานข้อมูลครบหรือไม่ (databaseConfigError เป็น null คือครบ)
 export function hasDbConfig(): boolean {
   return databaseConfigError() === null;
 }

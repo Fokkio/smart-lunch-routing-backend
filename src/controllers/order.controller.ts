@@ -1,3 +1,4 @@
+// ไฟล์นี้: รับ-ส่ง HTTP เรื่องออเดอร์และออเดอร์จำลอง แล้วส่งต่อให้ OrderService
 import type { NextFunction, Request, Response } from 'express';
 import { OrderService } from '../services/order.service';
 import { parseNearbyQuery, parseSimulationRequest } from './request-validation';
@@ -5,7 +6,9 @@ import { validDate } from '../services/input-validation';
 import { ShopSettingsModel } from '../models/shop-settings.model';
 
 /** Thin HTTP adapter — no SQL, no business rules here. */
+// คลาสรับ-ส่ง HTTP เรื่องออเดอร์: แค่รับ request แล้วส่งต่อให้ OrderService (ไม่มี SQL ตรงนี้)
 export class OrderController {
+// แสดงออเดอร์ทั้งหมด กรองได้ตามสถานะ วันที่ และลูกค้า
   static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       res.json(await OrderService.findAll({
@@ -18,6 +21,7 @@ export class OrderController {
     }
   }
 
+// แสดงออเดอร์ที่อยู่ใกล้ร้าน: ใช้พิกัดร้านเป็นจุดศูนย์กลาง ตรวจวันที่และสถานะก่อน แล้วค้นในรัศมีที่ขอ
   static async nearby(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const shop = await ShopSettingsModel.get();
@@ -38,6 +42,7 @@ export class OrderController {
     }
   }
 
+// แสดงออเดอร์เดียวตาม id ถ้าไม่เจอตอบ 404
   static async get(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const order = await OrderService.findById(req.params['id'] as string);
@@ -51,6 +56,7 @@ export class OrderController {
     }
   }
 
+// สร้างออเดอร์จำลองตามจำนวนและวันที่ที่ขอ แล้วตอบจำนวนที่สร้างพร้อมรายการ
   static async simulate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { count, orderDate } = parseSimulationRequest(req.body?.count, req.body?.orderDate);
@@ -61,6 +67,7 @@ export class OrderController {
     }
   }
 
+// ลบออเดอร์จำลองตามรายการ id ที่ส่งมา แล้วตอบจำนวนที่ลบ
   static async clearSimulated(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       res.json({ deletedCount: await OrderService.deleteSimulated(req.body?.orderIds) });
@@ -69,6 +76,7 @@ export class OrderController {
     }
   }
 
+// สร้างออเดอร์ใหม่: รับ body ส่งให้ service แล้วตอบ 201
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       res.status(201).json(await OrderService.create(req.body));
@@ -77,6 +85,7 @@ export class OrderController {
     }
   }
 
+// แก้ไขออเดอร์ตาม id ถ้าไม่เจอตอบ 404
   static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const order = await OrderService.update(req.params['id'] as string, req.body);
@@ -90,6 +99,7 @@ export class OrderController {
     }
   }
 
+// ลบออเดอร์ตาม id ถ้าไม่เจอตอบ 404 ถ้าลบได้ตอบ 204
   static async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const deleted = await OrderService.delete(req.params['id'] as string);

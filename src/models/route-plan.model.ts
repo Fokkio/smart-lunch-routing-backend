@@ -1,3 +1,4 @@
+// ไฟล์นี้: SQL ของตารางแผนจัดส่ง งาน และจุดส่ง รวมถึงการยืนยันงาน การส่งของทีละจุด การเลือกแผน และการลบแผน
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   RoutePlanDetailResponse,
@@ -29,8 +30,10 @@ export type { JobRow, PlanRow, StopRow } from './route-plan-mapping';
 export type JobAssignment = { jobId: number; riderId: number };
 
 /** 409 — a conflicting SELECTED plan already exists for the date. */
+// error สำหรับแผนที่ขัดกัน: สถานะ HTTP 409 ใช้ตอนงานจบแล้ว ยกเลิกแล้ว หรือยังไม่รับทราบงานก่อนเริ่มงาน
 export class PlanConflictError extends Error {
   readonly statusCode = 409;
+// สร้าง error แผนขัดกันพร้อมชื่อ error และสถานะ 409
   constructor(message: string) {
     super(message);
     this.name = 'PlanConflictError';
@@ -42,7 +45,9 @@ export class PlanConflictError extends Error {
  * delivery_job_orders (migrations 001 + 002). One plan is created per
  * generate call — never overwritten; plans coexist and the owner picks.
  */
+// คลาส SQL ของตารางแผนจัดส่ง งาน และจุดส่ง
 export class RoutePlanModel {
+// รับทราบงานของไรเดอร์: งานต้องอยู่ในแผนที่เลือกแล้ว ถ้าเป็นการเริ่มงานต้องรับทราบก่อน แล้วเปลี่ยนสถานะเป็น DELIVERING
   static async acknowledgeJob(jobId: number, riderId: number, start = false): Promise<boolean> {
     return withTransaction(async (conn) => {
       await lockPlanning(conn);
@@ -74,6 +79,7 @@ export class RoutePlanModel {
       return true;
     });
   }
+// บันทึกว่าส่งจุดหนึ่งแล้ว: แผนต้องเลือกแล้ว งานต้องเริ่มแล้ว และต้องส่งตามลำดับ ถ้าส่งครบทุกจุดงานจะกลายเป็น COMPLETED
   static async deliverStop(
     planId: number,
     jobId: number,
@@ -137,6 +143,7 @@ export class RoutePlanModel {
   }
 
   /** Persist an assembled plan with all jobs/stops in one transaction. */
+// บันทึกแผนใหม่พร้อมงานและจุดส่งใน transaction เดียว: ตรวจ snapshot ก่อน แล้วคืน id ของแผนที่สร้าง
   static async create(plan: RoutePlanResponse, startTime: string): Promise<number> {
     return withTransaction(async (conn) => {
       await lockPlanning(conn);
@@ -156,7 +163,9 @@ export class RoutePlanModel {
          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           plan.planDate,
+// แปลงเวลา HH:MM ให้เป็น HH:MM:SS สำหรับคอลัมน์ TIME ค่าเต็มอยู่แล้วส่งกลับเหมือนเดิม
           toTime(startTime),
+// แปลงเวลา HH:MM ให้เป็น HH:MM:SS สำหรับคอลัมน์ TIME ค่าเต็มอยู่แล้วส่งกลับเหมือนเดิม
           toTime(plan.estimatedFinishTime),
           plan.riderCount,
           plan.totalDistanceKm,
@@ -186,7 +195,9 @@ export class RoutePlanModel {
             job.totalBoxes,
             job.distanceKm,
             Math.round(job.durationMinutes),
+// แปลงเวลา HH:MM ให้เป็น HH:MM:SS สำหรับคอลัมน์ TIME ค่าเต็มอยู่แล้วส่งกลับเหมือนเดิม
             toTime(job.estimatedStartTime),
+// แปลงเวลา HH:MM ให้เป็น HH:MM:SS สำหรับคอลัมน์ TIME ค่าเต็มอยู่แล้วส่งกลับเหมือนเดิม
             toTime(job.estimatedFinishTime),
             job.deliveryCost,
             job.geometry ? JSON.stringify(job.geometry) : null,
@@ -204,6 +215,7 @@ export class RoutePlanModel {
               stop.sequence,
               stop.distanceFromPreviousKm,
               stop.travelTimeFromPreviousMin,
+// แปลงเวลา HH:MM ให้เป็น HH:MM:SS สำหรับคอลัมน์ TIME ค่าเต็มอยู่แล้วส่งกลับเหมือนเดิม
               toTime(stop.estimatedArrivalTime),
               stop.geometry ? JSON.stringify(stop.geometry) : null,
             ],
@@ -214,6 +226,7 @@ export class RoutePlanModel {
     });
   }
 
+// แสดงสรุปแผนทั้งหมด: กล่องรวมคำนวณจากตารางงาน (ตารางแผนไม่มีคอลัมน์นี้) กรองตามวันที่ได้ เรียงจากใหม่ไปเก่า
   static async list(planDate?: string): Promise<RoutePlanSummaryResponse[]> {
     // totalBoxes is NOT a route_plans column — derive it from the
     // normalized delivery_jobs rows (SUM per plan, 0 when jobless).
@@ -238,6 +251,7 @@ export class RoutePlanModel {
   }
 
   /** Full plan with jobs, stops, customer details, and geometry. */
+// ดึงแผนฉบับเต็มตาม id: แผน งาน จุดส่ง ข้อมูลลูกค้า และ geometry ถ้าไม่เจอคืน null
   static async findFull(
     routePlanId: number,
     conn?: PoolConnection,
@@ -274,6 +288,7 @@ export class RoutePlanModel {
     };
   }
 
+// ดึงใบงานของไรเดอร์ในวันที่ขอ: งานในแผนที่เลือกแล้วของวันนี้ หรือแผนวันก่อนที่ยังมีจุดค้างส่ง
   static async findRiderJobs(riderId: number, planDate: string) {
     const [rows] = await getPool().execute<
       Array<JobRow & { approximate: number | boolean; input_snapshot: PlanRow['input_snapshot'] }>
@@ -305,6 +320,7 @@ export class RoutePlanModel {
     });
   }
 
+// หา id แผนที่เลือกแล้วของงานไรเดอร์คนนี้ ถ้าไม่เจอคืน null
   static async findSelectedRiderJobPlan(riderId: number, jobId: number): Promise<number | null> {
     const [rows] = await getPool().execute<(RowDataPacket & { route_plan_id: number })[]>(
       `SELECT rp.route_plan_id FROM delivery_jobs dj
@@ -325,6 +341,7 @@ export class RoutePlanModel {
    * @throws {PlanConflictError} (HTTP 409) when another plan for the same
    * work is no longer assignable.
    */
+// เลือกแผน: ตรวจว่าไรเดอร์แต่ละงานว่างและไม่ซ้ำกัน ตรวจ snapshot แล้วเปลี่ยนแผนเป็น SELECTED และออเดอร์เป็น PLANNED
   static async select(
     routePlanId: number,
     assignments?: JobAssignment[],
@@ -432,6 +449,7 @@ export class RoutePlanModel {
   }
 
   /** Delete one plan and its jobs/stops; restore pending orders only for a selected plan. */
+// ลบแผนพร้อมงานและจุดส่ง: แผนที่เลือกแล้วจะคืนออเดอร์เป็น PENDING แต่ลบไม่ได้ถ้ามีของกำลังส่งอยู่
   static async deleteById(routePlanId: number, draftOnly = false): Promise<boolean> {
     return withTransaction(async (conn) => {
       await lockPlanning(conn);
@@ -475,6 +493,7 @@ export class RoutePlanModel {
     });
   }
 
+// ดึงจุดส่งของงานหลายงานในครั้งเดียว แล้วจัดกลุ่มตาม id งาน
   private static async findStops(
     jobs: JobRow[],
     conn?: PoolConnection,
@@ -504,6 +523,7 @@ const STOP_QUERY = `SELECT jbo.delivery_job_id, jbo.order_id, jbo.stop_sequence,
  JOIN customers c ON c.customer_id = o.customer_id`;
 
 /** "HH:MM" → "HH:MM:SS" for TIME columns; passes through full values. */
+// แปลงเวลา HH:MM ให้เป็น HH:MM:SS สำหรับคอลัมน์ TIME ค่าเต็มอยู่แล้วส่งกลับเหมือนเดิม
 function toTime(value: string): string {
   return /^\d{2}:\d{2}$/.test(value) ? `${value}:00` : value;
 }

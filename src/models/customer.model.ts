@@ -1,3 +1,4 @@
+// ไฟล์นี้: SQL ของตารางลูกค้า ได้แก่ ค้นหา เพิ่ม แก้ไข ลบ และค้นหาใกล้ ๆ
 import { type ResultSetHeader, type RowDataPacket } from "mysql2/promise";
 import { getPool, withTransaction } from "../database/mysql.connection";
 import { guardPlanEdit, lockPlanning } from './plan-inputs';
@@ -34,6 +35,7 @@ type Row = RowDataPacket & {
 };
 type NearbyRow = Row & { distance_km: number };
 
+// แปลงแถวลูกค้าจากฐานข้อมูลให้เป็น object ลูกค้าที่ใช้ในโค้ด
 const map = (row: Row): Customer => ({
   id: row.customer_id,
   name: row.name,
@@ -44,7 +46,9 @@ const map = (row: Row): Customer => ({
   createdAt: row.created_at?.toISOString(),
 });
 
+// คลาส SQL ของตารางลูกค้า
 export class CustomerModel {
+// ดึงลูกค้าทั้งหมดเรียงตาม id จากมากไปน้อย
   static async findAll(): Promise<Customer[]> {
     const [rows] = await getPool().query<Row[]>(
       "SELECT * FROM customers ORDER BY customer_id DESC",
@@ -68,6 +72,7 @@ export class CustomerModel {
     return rows.map(map);
   }
 
+// ค้นหาลูกค้าที่อยู่ในรัศมีที่กำหนด: คำนวณระยะทาง haversine ใน SQL แล้วเรียงจากใกล้ไปไกล
   static async searchNearby(
     lat: number,
     lng: number,
@@ -91,6 +96,7 @@ export class CustomerModel {
     }));
   }
 
+// ดึงลูกค้าคนเดียวตาม id ถ้าไม่เจอคืน null
   static async findById(id: string): Promise<Customer | null> {
     const [rows] = await getPool().execute<Row[]>(
       "SELECT * FROM customers WHERE customer_id = ?",
@@ -99,6 +105,7 @@ export class CustomerModel {
     return rows[0] ? map(rows[0]) : null;
   }
 
+// ดึงลูกค้าหลายคนตามรายการ id (ตัด id ซ้ำออกก่อน) ถ้ารายการว่างคืนอาร์เรย์ว่าง
   static async findByIds(ids: number[]): Promise<Customer[]> {
     const unique = [...new Set(ids)];
     if (!unique.length) return [];
@@ -106,6 +113,7 @@ export class CustomerModel {
     return rows.map(map);
   }
 
+// ดึงลูกค้าคนเดียวตามเบอร์โทร ถ้าไม่เจอคืน null
   static async findByPhone(phone: string): Promise<Customer | null> {
     const [rows] = await getPool().execute<Row[]>(
       "SELECT * FROM customers WHERE phone = ? LIMIT 1",
@@ -114,6 +122,7 @@ export class CustomerModel {
     return rows[0] ? map(rows[0]) : null;
   }
 
+// เพิ่มลูกค้าใหม่ลงฐานข้อมูล แล้วดึงแถวที่สร้างกลับมา
   static async create(input: CustomerInput): Promise<Customer> {
     const [result] = await getPool().execute<ResultSetHeader>(
       "INSERT INTO customers (name,phone,address,latitude,longitude) VALUES (?,?,?,?,?)",
@@ -122,6 +131,7 @@ export class CustomerModel {
     return (await this.findById(String(result.insertId)))!;
   }
 
+// แก้ไขลูกค้า: ล็อกตอนวางแผน กันการแก้ข้อมูลที่อยู่ในแผนที่ยืนยันแล้ว แล้วอัปเดตเฉพาะช่องที่ส่งมา
   static async update(
     id: string,
     input: Partial<CustomerInput>,
@@ -156,6 +166,7 @@ export class CustomerModel {
     return this.findById(id);
   }
 
+// ลบลูกค้าตาม id: คืน true ถ้าลบได้จริง false ถ้าไม่เจอ
   static async delete(id: string): Promise<boolean> {
     const [result] = await getPool().execute<ResultSetHeader>(
       "DELETE FROM customers WHERE customer_id=?",

@@ -1,3 +1,4 @@
+// ไฟล์นี้: นิยามพิกัดและตรวจว่าละติจูด/ลองจิจูดอยู่ในช่วงที่ถูกต้อง
 import { InvalidCoordinateError } from './distance.errors';
 
 /**
@@ -20,6 +21,7 @@ export interface Coordinate {
  * or outside its valid range. Invalid values are never silently clamped
  * or converted, so bad input can never produce a meaningless `NaN km`.
  */
+// ตรวจพิกัด: ต้องเป็นตัวเลข ละติจูด -90 ถึง 90 ลองจิจูด -180 ถึง 180 ไม่งั้นโยน InvalidCoordinateError
 export function validateCoordinate(coordinate: Coordinate): void {
   const lat = (coordinate as Coordinate | null | undefined)?.latitude;
   const lng = (coordinate as Coordinate | null | undefined)?.longitude;

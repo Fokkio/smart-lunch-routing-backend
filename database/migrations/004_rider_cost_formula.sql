@@ -1,3 +1,5 @@
+-- ไฟล์นี้: ปรับ rider_cost_per_km จาก 4 เป็น 2 เฉพาะแถวที่ยังใช้ค่าเก่า ไม่ทับค่าที่ตั้งเอง
+-- รันด้วย: npm run db:migrate:cost-formula
 -- 004: align rider_cost_per_km with the per-box delivery formula (Project.pdf):
 -- delivery per job = rider_base_cost + route_km x rider_cost_per_km x boxes,
 -- where the shop charges 2 THB per km per box.

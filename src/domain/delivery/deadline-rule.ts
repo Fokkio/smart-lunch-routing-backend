@@ -1,3 +1,4 @@
+// ไฟล์นี้: กฎเส้นตาย คิดเวลาเป็นวินาที งานต้องจบไม่เกินเส้นตาย
 /**
  * Deadline validation (pure domain, second precision).
  *
@@ -14,6 +15,7 @@
  */
 
 /** Parse "HH:MM" or "HH:MM:SS" (also accepts a TIME column string) to seconds since midnight. */
+// แปลงเวลา HH:MM หรือ HH:MM:SS ให้เป็นวินาทีนับจากเที่ยงคืน (เวลาผิดฟอร์แมตโยน error)
 export function timeToSeconds(time: string): number {
   const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(time.trim());
   if (!match) throw new Error(`Invalid time "${time}" (expected HH:MM or HH:MM:SS)`);
@@ -27,6 +29,7 @@ export function timeToSeconds(time: string): number {
 }
 
 /** Format seconds since midnight as "HH:MM" (presentation boundary). */
+// แปลงวินาทีนับจากเที่ยงคืนกลับเป็น HH:MM (ปัดเศษวินาทีทิ้งเป็นนาที)
 export function secondsToHHMM(totalSeconds: number): string {
   const rounded = Math.floor(totalSeconds / 60) * 60;
   const hours = Math.floor(rounded / 3600) % 24;
@@ -35,6 +38,7 @@ export function secondsToHHMM(totalSeconds: number): string {
 }
 
 /** Job finish in seconds: start + duration (fractional minutes allowed). */
+// คำนวณเวลาจบงาน: เวลาเริ่ม (วินาที) + ระยะเวลา (นาที) -> เวลาจบ (วินาที)
 export function finishSeconds(startSeconds: number, durationMinutes: number): number {
   if (!Number.isFinite(durationMinutes) || durationMinutes < 0) {
     throw new Error(`durationMinutes must be a non-negative number, got ${durationMinutes}`);
@@ -43,6 +47,7 @@ export function finishSeconds(startSeconds: number, durationMinutes: number): nu
 }
 
 /** A job is on time only when it finishes at or before the deadline. */
+// ตรวจว่างานจบตรงหรือก่อนเส้นตายหรือไม่ (จบพอดีเส้นตายถือว่าทัน)
 export function isOnTime(finishInSeconds: number, deadlineInSeconds: number): boolean {
   return finishInSeconds <= deadlineInSeconds;
 }

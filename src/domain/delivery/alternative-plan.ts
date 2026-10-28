@@ -1,3 +1,4 @@
+// ไฟล์นี้: หาแผนจัดส่งทางเลือกที่ต่างจากแผนเดิม โดยลองสลับออเดอร์ระหว่างกลุ่ม
 import { clusterOrders, minimumRiderCount, type ClusterOrder } from './order-clusterer';
 import { calculateCosts, type CostSettings } from './cost-calculator';
 import { sequenceStops, type SequencedRoute } from '../routing/route-sequencer';
@@ -5,8 +6,10 @@ import type { Coordinate } from '../routing/coordinate';
 import type { TravelMatrix } from '../routing/distance.types';
 import { InfeasiblePlanError } from './route-plan-assembler';
 
+// แปลงกลุ่มออเดอร์ให้เป็นข้อความเฉพาะตัวของแผนนั้น ใช้เปรียบเทียบว่าแผนซ้ำกันหรือไม่
 export const routeSignature = (groups: string[][]): string => JSON.stringify(groups.map(group => JSON.stringify(group)).sort());
 
+// หาแผนทางเลือก: ลองสลับออเดอร์ระหว่างกลุ่มจนได้แผนที่ยังไม่เคยลองและผ่านเส้นตาย แล้วคืนเส้นทางที่เรียงแล้ว
 export function findAlternativeRoutes(input: {
   orders: ClusterOrder[]; boxes: Map<string, number>; shop: Coordinate; matrix: TravelMatrix;
   maxOrders: number; riderCount: number; availableMinutes: number; serviceMinutes: number;
@@ -17,6 +20,7 @@ export function findAlternativeRoutes(input: {
   let best: { routes: SequencedRoute[]; cost: number; finish: number; key: string } | null = null;
   // ponytail: bounded seed/move/swap search, not a global optimum; replace with a VRP solver if larger batches need it.
   const limit = 5000;
+// ตรวจเส้นทางชุดหนึ่ง: ถ้าทุกงานจบก่อนเส้นตายและยังไม่เคยลอง ให้เก็บไว้เป็นตัวเลือก
   const considerRoutes = (routes: SequencedRoute[]) => {
     if (seen.size >= limit) return;
     const key = routeSignature(routes.map(route => route.orderIds));
@@ -29,6 +33,7 @@ export function findAlternativeRoutes(input: {
     const cost = calculateCosts(jobs.reduce((sum, job) => sum + job.boxes, 0), jobs, input.costs).totalDeliveryCost;
     if (!best || cost < best.cost || (cost === best.cost && (finish < best.finish || (finish === best.finish && key < best.key)))) best = { routes, cost, finish, key };
   };
+// ตรวจกลุ่มออเดอร์ชุดหนึ่ง: เรียงจุดแต่ละกลุ่มแล้วส่งให้ considerRoutes ตรวจต่อ
   const consider = (groups: string[][]) => {
     if (seen.size >= limit || groups.some(group => !group.length || group.length > input.maxOrders)) return;
     const routes = groups.map(group => sequenceStops('SHOP', group, input.matrix));

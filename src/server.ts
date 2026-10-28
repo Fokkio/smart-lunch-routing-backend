@@ -1,3 +1,4 @@
+// ไฟล์นี้: จุดเริ่มเซิร์ฟเวอร์ ตรวจ config ฐานข้อมูล ทดลองเชื่อมต่อ แล้วเปิด port
 import type { Server } from 'node:http';
 import app from './app';
 
@@ -13,6 +14,7 @@ import {
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+// จุดเริ่มโปรแกรม: ตรวจ config ฐานข้อมูล ทดลองเชื่อมต่อ แล้วเปิด server ตาม port ที่ตั้งไว้
 async function main(): Promise<void> {
   // ตรวจสอบค่า environment variable ของ database
   const problem = databaseConfigError();
@@ -36,9 +38,11 @@ async function main(): Promise<void> {
   registerGracefulShutdown(server);
 }
 
+// ผูกสัญญาณ SIGINT/SIGTERM ให้ปิด server และ pool ฐานข้อมูลอย่างเรียบร้อยก่อนออก
 function registerGracefulShutdown(server: Server): void {
   let shuttingDown = false;
 
+// ปิด server: กันการปิดซ้ำ รอไม่เกิน 10 วินาที ปิด pool แล้วค่อยออกจากโปรแกรม
   const shutdown = (signal: NodeJS.Signals): void => {
     if (shuttingDown) {
       console.warn(`[server] ${signal} received while shutdown is already running.`);

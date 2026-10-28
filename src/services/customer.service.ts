@@ -1,3 +1,4 @@
+// ไฟล์นี้: ตรวจข้อมูลลูกค้าก่อนบันทึก และเรียก CustomerModel
 import {
   CustomerModel,
   type Customer,
@@ -12,6 +13,7 @@ function normalizePhone(phone: string): string {
   return phone.replace(/[\s-]/g, '');
 }
 
+// ตรวจข้อมูลลูกค้า: ชื่อไม่ว่างและไม่เกิน 150 ตัวอักษร เบอร์ต้องเป็นมือถือไทย 10 หลัก พิกัดต้องอยู่ในช่วงที่ถูกต้อง
 function validate(input: Partial<CustomerInput>): void {
   validateObject(input, 'customer data must be an object');
 
@@ -88,24 +90,30 @@ function handleCustomerWriteError(error: unknown): never {
   throw error;
 }
 
+// คลาสตรวจข้อมูลลูกค้าก่อนบันทึก แล้วเรียก CustomerModel
 export class CustomerService {
+// ดึงลูกค้าทั้งหมดผ่าน model
   static findAll(): Promise<Customer[]> {
     return CustomerModel.findAll();
   }
 
+// ค้นหาลูกค้าตามคำค้นผ่าน model
   static search(query: string): Promise<Customer[]> {
     return CustomerModel.search(query);
   }
 
+// ดึงลูกค้าที่อยู่ในรัศมีที่กำหนดผ่าน model
   static findNearby(lat: number, lng: number, radiusKm: number): Promise<CustomerWithDistance[]> {
     return CustomerModel.searchNearby(lat, lng, radiusKm);
   }
 
+// ดึงลูกค้าคนเดียวตาม id: ตรวจก่อนว่า id เป็นจำนวนเต็มบวก
   static findById(id: string): Promise<Customer | null> {
     validateId(id, 'customer id must be a positive integer');
     return CustomerModel.findById(id);
   }
 
+// สร้างลูกค้าใหม่: ตรวจข้อมูลก่อน ชื่อว่างให้ประกอบจาก first_name/last_name แล้วจัดรูปแบบเบอร์ก่อนบันทึก
   static async create(input: CustomerInput): Promise<Customer> {
     // check input first
     validate(input);
@@ -135,6 +143,7 @@ export class CustomerService {
     }
   }
 
+// แก้ไขลูกค้า: ตรวจ id และข้อมูลก่อน เบอร์ที่ไม่ได้ส่งคงค่าเดิม แล้วแปลง error เบอร์ซ้ำเป็น 409
   static async update(id: string, input: Partial<CustomerInput>): Promise<Customer | null> {
     validateId(id, 'customer id must be a positive integer');
     validate(input);
@@ -160,6 +169,7 @@ export class CustomerService {
   }
 
   // DELETE
+// ลบลูกค้า: ตรวจ id ก่อน ถ้าฐานข้อมูลปฏิเสธเพราะมีออเดอร์อ้างอิงอยู่แปลงเป็น 409
   static async delete(id: string): Promise<boolean> {
     validateId(id, 'customer id must be a positive integer');
 

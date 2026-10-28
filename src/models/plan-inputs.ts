@@ -1,3 +1,4 @@
+// ไฟล์นี้: ภาพ snapshot ของข้อมูลตอนคำนวณแผน การล็อกตอนวางแผน และการกันไม่ให้แก้ข้อมูลที่อยู่ในแผนที่ยืนยันแล้ว
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import type { RouteStopResponse } from '../domain/routing/route-plan.types';
 import { ShopSettingsModel, type ShopSettings } from './shop-settings.model';
@@ -5,11 +6,13 @@ import { ShopSettingsModel, type ShopSettings } from './shop-settings.model';
 export type PlanStopInput = Pick<RouteStopResponse, 'orderId' | 'customerId' | 'customerName' | 'phone' | 'address' | 'latitude' | 'longitude' | 'boxCount'>;
 export type PlanSnapshot = { shop: ShopSettings; stops: PlanStopInput[]; scope?:'BATCH';window?:{startTime:string;deadline:string} };
 
+// ตัดข้อมูลจุดส่งให้เหลือเฉพาะช่องที่เก็บใน snapshot ของแผน
 export function snapshotStop(stop: PlanStopInput): PlanStopInput {
   const { orderId, customerId, customerName, phone, address, latitude, longitude, boxCount } = stop;
   return { orderId, customerId, customerName, phone, address, latitude, longitude, boxCount };
 }
 
+// อ่าน snapshot ของแผน: รับ string JSON หรือ object ถ้ารูปไม่ถูกต้องคืน null
 export function readSnapshot(value: unknown): PlanSnapshot | null {
   if (!value) return null;
   const parsed = typeof value === 'string' ? JSON.parse(value) : value;
@@ -18,10 +21,12 @@ export function readSnapshot(value: unknown): PlanSnapshot | null {
 }
 
 // ponytail: serialize planning writes for this single shop; use per-shop locks if multi-shop is added.
+// ล็อกแถวตั้งค่าร้าน (setting_id = 1) เพื่อให้การเขียนแผนทำทีละชุด ไม่ชนกัน
 export async function lockPlanning(conn: PoolConnection): Promise<void> {
   await conn.execute('SELECT setting_id FROM shop_settings WHERE setting_id=1 FOR UPDATE');
 }
 
+// ตรวจ snapshot ของแผนกับข้อมูลจริง: ออเดอร์ ลูกค้า และค่าตั้งร้านต้องตรงกับตอนคำนวณ ไม่งั้นโยน 409 ให้คำนวณแผนใหม่
 export async function validateSnapshot(conn: PoolConnection, snapshot: PlanSnapshot, planDate: string): Promise<void> {
   const ids=snapshot.scope==='BATCH'?snapshot.stops.map(stop=>stop.orderId):[];
   if(snapshot.scope==='BATCH'&&!ids.length)throw Object.assign(new Error('A round must contain orders'),{statusCode:409});
@@ -42,6 +47,7 @@ export async function validateSnapshot(conn: PoolConnection, snapshot: PlanSnaps
 }
 
 /** Caller supplies only a fixed SQL predicate; values always use parameters. */
+// กันการแก้ข้อมูล: ถ้าข้อมูลอยู่ในแผนที่ยืนยันแล้วโยน 409 ถ้าอยู่ในแผนฉบับร่างให้เปลี่ยนแผนนั้นเป็น REJECTED
 export async function guardPlanEdit(conn: PoolConnection, predicate: string, values: (string | number)[], includeCompleted = true): Promise<void> {
   const joins = `FROM route_plans rp JOIN delivery_jobs dj ON dj.route_plan_id=rp.route_plan_id
     JOIN delivery_job_orders djo ON djo.delivery_job_id=dj.delivery_job_id

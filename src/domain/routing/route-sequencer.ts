@@ -1,3 +1,4 @@
+// ไฟล์นี้: เรียงลำดับจุดส่งในงานเดียวให้ระยะทางรวมสั้นที่สุด (งานละไม่เกิน 3 จุด)
 import type { TravelMatrix } from './distance.types';
 
 /**
@@ -19,6 +20,7 @@ export interface SequencedRoute {
   totalDurationMinutes: number;
 }
 
+// เรียงจุดส่งในงานเดียวให้ดีที่สุด: ลองทุกการเรียงที่เป็นไปได้ (ไม่เกิน 3 จุด) แล้วเลือกที่ระยะทางรวมสั้นที่สุด
 export function sequenceStops(
   shopId: string,
   orderIds: string[],
@@ -65,12 +67,14 @@ export function sequenceStops(
   return best;
 }
 
+// หาตำแหน่งของจุดในตารางระยะทาง: ถ้าไม่มีจุดนี้โยน error
 function mustFindIndex(indexOf: Map<string, number>, id: string): number {
   const index = indexOf.get(id);
   if (index === undefined) throw new Error(`TravelMatrix has no point "${id}"`);
   return index;
 }
 
+// สร้างทุกการเรียงที่เป็นไปได้ของรายการที่ส่งมา (ใช้ลองเรียงจุดส่ง)
 function permutations<T>(items: T[]): T[][] {
   if (items.length <= 1) return [items.slice()];
   const result: T[][] = [];

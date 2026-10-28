@@ -1,5 +1,7 @@
+// ไฟล์นี้: ตรวจและแปลงค่าจาก query/body สำหรับค้นหาใกล้ ๆ และสร้างออเดอร์จำลอง
 import { validDate } from '../services/input-validation';
 
+// ตรวจและแปลงค่า lat/lng/radius จาก query: ตัวเลขต้องอยู่ในช่วงที่ถูกต้อง ไม่งั้นโยน error 400
 export function parseNearbyQuery(
   latValue: unknown,
   lngValue: unknown,
@@ -19,6 +21,7 @@ export function parseNearbyQuery(
   return { lat, lng, radiusKm };
 }
 
+// ตรวจคำขอสร้างออเดอร์จำลอง: จำนวนต้องเป็นจำนวนเต็ม 20-30 และวันที่ต้องเป็น YYYY-MM-DD
 export function parseSimulationRequest(countValue: unknown, dateValue: unknown): { count: number; orderDate?: string } {
   const count = countValue === undefined ? 25 : Number(countValue);
   if (!Number.isInteger(count) || count < 20 || count > 30) {
@@ -30,6 +33,7 @@ export function parseSimulationRequest(countValue: unknown, dateValue: unknown):
   return { count, orderDate: dateValue as string | undefined };
 }
 
+// โยน error 400 พร้อมข้อความที่ส่งมา (ใช้ภายในไฟล์นี้เท่านั้น)
 function badRequest(message: string): never {
   throw Object.assign(new Error(message), { statusCode: 400 });
 }

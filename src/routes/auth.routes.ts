@@ -1,3 +1,4 @@
+// ไฟล์นี้: route เรื่องล็อกอิน ดู/แก้บัญชีเจ้าของร้าน ออกจากระบบ และเปลี่ยนรหัสผ่านไรเดอร์
 import { Router } from 'express';
 import { getPool, withTransaction } from '../database/mysql.connection';
 import {
@@ -14,6 +15,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { badInput, validateObject } from '../services/input-validation';
 
 export const authRoutes = Router();
+// ล็อกอิน: ตรวจ role ชื่อผู้ใช้ และรหัสผ่านเบื้องต้น แล้วเรียก login
 authRoutes.post('/login', async (req, res, next) => {
   try {
     const { role, username, password } = req.body ?? {};
@@ -39,7 +41,9 @@ authRoutes.post('/login', async (req, res, next) => {
     next(error);
   }
 });
+// ดูตัวตนของผู้ที่ล็อกอินอยู่จาก session
 authRoutes.get('/me', requireAuth, (_req, res) => res.json(res.locals['identity'] as Identity));
+// ดูชื่อผู้ใช้ของบัญชีเจ้าของร้านที่ล็อกอินอยู่
 authRoutes.get('/owner-account', requireAuth, requireOwner, async (_req, res, next) => {
   try {
     const ownerId = (res.locals['identity'] as Identity).id;
@@ -56,6 +60,7 @@ authRoutes.get('/owner-account', requireAuth, requireOwner, async (_req, res, ne
     next(error);
   }
 });
+// แก้ชื่อผู้ใช้หรือรหัสผ่านเจ้าของร้าน: ต้องตรวจรหัสผ่านเดิมก่อน แล้วลบ session เดิมทั้งหมด
 authRoutes.put('/owner-account', requireAuth, requireOwner, async (req, res, next) => {
   try {
     const body: unknown = req.body;
@@ -110,6 +115,7 @@ authRoutes.put('/owner-account', requireAuth, requireOwner, async (req, res, nex
     next(error);
   }
 });
+// ออกจากระบบ: ลบ session ของ token นี้
 authRoutes.post('/logout', requireAuth, async (_req, res, next) => {
   try {
     await getPool().execute('DELETE FROM auth_sessions WHERE token_hash=?', [
@@ -120,6 +126,7 @@ authRoutes.post('/logout', requireAuth, async (_req, res, next) => {
     next(error);
   }
 });
+// เปลี่ยนรหัสผ่านไรเดอร์: ตรวจรหัสผ่านเดิมก่อน แล้วลบ session เดิมทั้งหมด
 authRoutes.put('/password', requireAuth, requireRider, async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body ?? {};

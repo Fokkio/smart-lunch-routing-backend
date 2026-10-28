@@ -1,8 +1,10 @@
+// ไฟล์นี้: ล้างข้อมูลทุกตารางตามลำดับลูกก่อนแม่ ใช้ตอนเคลียร์ฐานข้อมูลเพื่อทดสอบ
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 
 // Child-first deletion keeps FK checks enabled; caller owns the transaction.
 const tables = ['auth_sessions', 'auth_login_attempts', 'delivery_job_orders', 'delivery_jobs', 'route_plans', 'orders', 'riders', 'customers', 'admin_users'] as const;
 
+// ล้างข้อมูลทุกตาราง: ถ้าตารางใดหายไปจะไม่ล้างเลย แล้วลบตามลำดับลูกก่อนแม่เพื่อไม่ให้ติด foreign key
 export async function clearDatabase(connection: PoolConnection): Promise<void> {
   const [rows] = await connection.query<RowDataPacket[]>('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()');
   const present = new Set(rows.map(row => String(row.TABLE_NAME)));

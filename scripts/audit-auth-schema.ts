@@ -1,5 +1,8 @@
+// ไฟล์นี้: ตรวจสอบคอลัมน์ของตารางเกี่ยวกับการเข้าสู่ระบบในฐานข้อมูลจริง
+// รันด้วย: npx tsx scripts/audit-auth-schema.ts
 import { closePool, getPool } from '../src/database/mysql.connection';
 
+// main(): ดึงชื่อตารางกับคอลัมน์ของตาราง auth จาก information_schema แล้วพิมพ์ออกมา
 async function main(): Promise<void> {
   const [rows] = await getPool().query<import('mysql2/promise').RowDataPacket[]>(
     `SELECT table_name, column_name FROM information_schema.columns

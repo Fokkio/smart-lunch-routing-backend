@@ -1,3 +1,5 @@
+-- ไฟล์นี้: schema อ้างอิงสำหรับสร้างฐานข้อมูลใหม่ทั้งหมด ใช้แทน migration ห้ามรันคู่กัน
+-- ไฟล์นี้ไม่ลบข้อมูลและไม่ใส่ข้อมูลเริ่มต้น (seed)
 -- Smart Lunch Route reference schema, aligned with the live TiDB database.
 -- Use for a fresh database instead of the migrations; do not run both paths.
 -- Includes the legacy deliveries table while it still exists in the database.
@@ -10,6 +12,7 @@ CREATE DATABASE IF NOT EXISTS smart_lunch_route
 
 USE smart_lunch_route;
 
+-- admin_users: ตารางบัญชีเจ้าของร้านและแอดมิน
 CREATE TABLE IF NOT EXISTS admin_users (
   admin_user_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   username VARCHAR(100) NOT NULL,
@@ -25,6 +28,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   KEY idx_admin_users_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- customers: ตารางข้อมูลลูกค้าและพิกัดที่อยู่
 CREATE TABLE IF NOT EXISTS customers (
   customer_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   name VARCHAR(150) NOT NULL,
@@ -42,6 +46,7 @@ CREATE TABLE IF NOT EXISTS customers (
   CONSTRAINT chk_customers_longitude CHECK (longitude BETWEEN -180 AND 180)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- riders: ตารางข้อมูลไรเดอร์
 CREATE TABLE IF NOT EXISTS riders (
   rider_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   rider_name VARCHAR(150) NOT NULL,
@@ -60,6 +65,7 @@ CREATE TABLE IF NOT EXISTS riders (
   KEY idx_riders_available (is_available, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- orders: ตารางออเดอร์ของลูกค้าในแต่ละวัน
 CREATE TABLE IF NOT EXISTS orders (
   order_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   customer_id INT UNSIGNED NOT NULL,
@@ -82,6 +88,7 @@ CREATE TABLE IF NOT EXISTS orders (
   CONSTRAINT chk_orders_box_count CHECK (box_count BETWEEN 1 AND 3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- shop_settings: ตารางค่าตั้งร้านเพียงแถวเดียว (setting_id=1)
 CREATE TABLE IF NOT EXISTS shop_settings (
   setting_id TINYINT UNSIGNED NOT NULL,
   shop_name VARCHAR(150) NOT NULL,
@@ -107,6 +114,7 @@ CREATE TABLE IF NOT EXISTS shop_settings (
   CONSTRAINT chk_shop_settings_prices CHECK (box_sale_price >= 0 AND box_food_cost >= 0 AND rider_base_cost >= 0 AND rider_cost_per_km >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- route_plans: ตารางแผนจัดส่งในแต่ละวันพร้อมยอดรวม
 CREATE TABLE IF NOT EXISTS route_plans (
   route_plan_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   plan_date DATE NOT NULL,
@@ -135,6 +143,7 @@ CREATE TABLE IF NOT EXISTS route_plans (
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- delivery_jobs: ตารางงานส่งของแต่ละไรเดอร์ในแต่ละแผน
 CREATE TABLE IF NOT EXISTS delivery_jobs (
   delivery_job_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   route_plan_id INT UNSIGNED NOT NULL,
@@ -167,6 +176,7 @@ CREATE TABLE IF NOT EXISTS delivery_jobs (
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- delivery_job_orders: ตารางจุดส่งแต่ละออเดอร์ในแต่ละงาน
 CREATE TABLE IF NOT EXISTS delivery_job_orders (
   delivery_job_order_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   delivery_job_id INT UNSIGNED NOT NULL,
@@ -192,6 +202,7 @@ CREATE TABLE IF NOT EXISTS delivery_job_orders (
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- deliveries: ตารางเก่าที่ยังคงไว้ชั่วคราว ไม่ใช่ตารางงานหลักแล้ว
 CREATE TABLE IF NOT EXISTS deliveries (
   id VARCHAR(40) NOT NULL,
   rider_id INT UNSIGNED NOT NULL,
@@ -209,6 +220,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
   CONSTRAINT fk_deliveries_job FOREIGN KEY (delivery_job_id) REFERENCES delivery_jobs (delivery_job_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- auth_sessions: ตารางเซสชันการเข้าสู่ระบบ
 CREATE TABLE IF NOT EXISTS auth_sessions (
   token_hash CHAR(64) NOT NULL PRIMARY KEY,
   actor_type ENUM('OWNER','RIDER') NOT NULL,
@@ -218,6 +230,7 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   KEY idx_auth_sessions_expiry (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- auth_login_attempts: ตารางนับครั้งเข้าสู่ระบบผิดและช่วงเวลาที่ถูกล็อก
 CREATE TABLE IF NOT EXISTS auth_login_attempts (
   subject_hash CHAR(64) NOT NULL PRIMARY KEY,
   failed_count INT NOT NULL DEFAULT 0,

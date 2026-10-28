@@ -1,3 +1,4 @@
+// ไฟล์นี้: ตรวจค่าตั้งร้านที่ส่งมาแก้ว่าชื่อ พิกัด เวลา และราคาอยู่ในช่วงที่ยอมรับได้หรือไม่
 import type { ShopSettings } from '../models/shop-settings.model';
 import { badInput } from './input-validation';
 const keys = [
@@ -6,6 +7,7 @@ const keys = [
   'riderBaseCost', 'riderCostPerKm', 'stopServiceMinutes',
 ] as const;
 
+// ตรวจค่าตั้งร้านที่ส่งมาแก้: ช่องต้องรู้จัก ค่าที่รวมกับค่าเดิมต้องอยู่ในช่วงที่ยอมรับ แล้วคืนเฉพาะช่องที่ส่งมาแก้
 export function validateSettings(input: unknown, current: ShopSettings): Partial<ShopSettings> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) badInput('Settings must be an object');
   const patch = input as Record<string, unknown>;

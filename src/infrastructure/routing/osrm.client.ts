@@ -1,3 +1,4 @@
+// ไฟล์นี้: client HTTP ตัวบาง ๆ สำหรับคุยกับ OSRM พร้อมตรวจ timeout และตรวจรูป response ให้เข้มงวด
 import { validateCoordinate, type Coordinate } from '../../domain/routing/coordinate';
 import type { GeoJsonLineString } from '../../domain/routing/distance.types';
 import { RoutingError } from './routing.errors';
@@ -35,7 +36,9 @@ export interface OsrmTableData {
  * - Every response is strictly validated; anything unexpected throws a
  *   coded `RoutingError` instead of leaking `undefined` into math.
  */
+// คลาส client HTTP สำหรับ OSRM: ส่งพิกัดแบบ longitude,latitude ตรวจ timeout และตรวจ response ให้เข้มงวด
 export class OsrmClient {
+// เก็บ URL หลักของ OSRM เวลา timeout และฟังก์ชัน fetch ที่ใช้ (ปกติใช้ fetch ของ Node)
   constructor(
     private readonly baseUrl: string,
     private readonly timeoutMs: number,
@@ -43,6 +46,7 @@ export class OsrmClient {
   ) {}
 
   /** OSRM Route service for one ordered waypoint list. */
+// ขอเส้นทางจาก OSRM Route service: ตรวจพิกัดก่อน ส่งจุดตามลำดับ แล้วตรวจว่าจำนวนขาตรงกับจุดที่ส่ง
   async getRoute(points: Coordinate[]): Promise<OsrmRouteData> {
     for (const point of points) validateCoordinate(point);
     const body = await this.get(
@@ -56,6 +60,7 @@ export class OsrmClient {
   }
 
   /** OSRM Table service for an N×N distance/duration matrix (one call). */
+// ขอตารางระยะทางจาก OSRM Table service: ตรวจพิกัดก่อน แล้วส่งจุดทั้งหมดในครั้งเดียว
   async getTable(points: Coordinate[]): Promise<OsrmTableData> {
     for (const point of points) validateCoordinate(point);
     const body = await this.get(
@@ -64,6 +69,7 @@ export class OsrmClient {
     return parseTableBody(body, points.length);
   }
 
+// ยิง HTTP ไป OSRM พร้อมจับเวลา timeout: HTTP ไม่สำเร็จหรือ timeout แปลงเป็น RoutingError
   private async get(path: string): Promise<unknown> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -94,10 +100,12 @@ export class OsrmClient {
   }
 }
 
+// แปลงรายการพิกัดให้เป็นข้อความแบบ OSRM: longitude,latitude คั่นด้วยเครื่องหมาย ;
 function formatPoints(points: Coordinate[]): string {
   return points.map((p) => `${p.longitude},${p.latitude}`).join(';');
 }
 
+// แกะ response ของ OSRM Route: ตรวจ code เป็น Ok ระยะทาง เวลา และ geometry ของแต่ละขาต้องเป็นตัวเลขและถูกต้อง
 function parseRouteBody(body: unknown): OsrmRouteData {
   const root = asObject(body, 'response');
   requireOkCode(root);
@@ -137,6 +145,7 @@ function parseRouteBody(body: unknown): OsrmRouteData {
   return { distanceMetres: distance, durationSeconds: duration, geometry: parseGeometry(first['geometry']), legGeometries, legs: legMetrics };
 }
 
+// แกะ geometry ของ OSRM: ต้องเป็น GeoJSON LineString และทุกคู่พิกัดต้องเป็นตัวเลข [longitude, latitude]
 function parseGeometry(value: unknown): GeoJsonLineString {
   const geometry = asObject(value, 'geometry');
   if (geometry['type'] !== 'LineString' || !Array.isArray(geometry['coordinates'])) {
@@ -161,6 +170,7 @@ function parseGeometry(value: unknown): GeoJsonLineString {
   return { type: 'LineString', coordinates };
 }
 
+// แกะ response ของ OSRM Table: ตรวจ code เป็น Ok แล้วแปลงตารางระยะทางและเวลาให้เป็นรูปเดียวกัน
 function parseTableBody(body: unknown, n: number): OsrmTableData {
   const root = asObject(body, 'response');
   requireOkCode(root);
@@ -170,6 +180,7 @@ function parseTableBody(body: unknown, n: number): OsrmTableData {
   };
 }
 
+// แกะตารางตัวเลขของ OSRM: ต้องเป็นตาราง n x n ช่องว่างเป็น null ได้ นอกนั้นต้องเป็นตัวเลขไม่ติดลบ
 function parseNullableMatrix(
   value: unknown,
   name: string,
@@ -195,6 +206,7 @@ function parseNullableMatrix(
   });
 }
 
+// ตรวจรหัส response ของ OSRM: NoRoute โยน NO_ROUTE รหัสอื่นที่ไม่ใช่ Ok โยน MALFORMED_RESPONSE
 function requireOkCode(root: Record<string, unknown>): void {
   if (root['code'] === 'NoRoute') {
     throw new RoutingError('NO_ROUTE', 'OSRM returned NoRoute for these points');
@@ -207,6 +219,7 @@ function requireOkCode(root: Record<string, unknown>): void {
   }
 }
 
+// ตรวจว่าค่าที่ส่งมาเป็น object จริงไหม ถ้าไม่ใช่โยน MALFORMED_RESPONSE
 function asObject(value: unknown, name: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new RoutingError('MALFORMED_RESPONSE', `OSRM ${name} is not an object`);

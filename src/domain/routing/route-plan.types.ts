@@ -1,3 +1,4 @@
+// ไฟล์นี้: นิยามรูป response ของแผนจัดส่งที่ส่งกลับไปให้ frontend (ไม่มีฟังก์ชันในไฟล์นี้)
 import type {
   DistanceSource,
   FallbackReason,

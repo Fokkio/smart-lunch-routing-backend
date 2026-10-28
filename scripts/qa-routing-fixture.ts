@@ -1,6 +1,9 @@
+// ไฟล์นี้: เซิร์ฟเวอร์ OSRM ปลอมสำหรับทดสอบ ใช้คำนวณระยะทางแบบเส้นตรงแทนถนนจริง
+// รันด้วย: ถูกเรียกจาก qa-live.ts เมื่อตั้ง QA_ROUTING_FIXTURE=yes
 import { createServer } from 'node:http';
 import { haversineKmBetween } from '../src/domain/routing/haversine-distance-calculator';
 
+// startRoutingFixture(): เปิดเซิร์ฟเวอร์ OSRM ปลอมบน 127.0.0.1:4312 คำนวณระยะทางด้วย haversine แทนถนนจริง
 /** External OSRM test double: all coordinates stay on loopback; NOT real road evidence. */
 export async function startRoutingFixture() {
   const server = createServer((req, res) => {

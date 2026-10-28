@@ -1,5 +1,8 @@
+// ไฟล์นี้: พิมพ์สรุปข้อมูลในฐานข้อมูล เช่น จำนวนออเดอร์ ลูกค้า ไรเดอร์ และสถานะแผน
+// รันด้วย: npx tsx scripts/qa-db-inspect.ts
 import { getPool, closePool } from '../src/database/mysql.connection';
 
+// main(): ตรวจการเชื่อมต่อฐานข้อมูล แล้วพิมพ์จำนวนออเดอร์ ลูกค้า ไรเดอร์ สถานะ และบัญชี QA ที่ยังเปิดอยู่
 async function main() { try {
   const db = getPool();
   await db.query('SELECT 1');

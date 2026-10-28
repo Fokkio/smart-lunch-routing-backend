@@ -1,3 +1,4 @@
+// ไฟล์นี้: แปลงแถวข้อมูลจากฐานข้อมูลให้เป็น response ของแผนและงาน โดยไม่แตะฐานข้อมูลเอง
 import type { RowDataPacket } from 'mysql2/promise';
 import type { GeoJsonLineString } from '../domain/routing/distance.types';
 import type {
@@ -65,6 +66,7 @@ export type StopRow = RowDataPacket & {
  * fake zeros. totalBoxes is passed in — derived from delivery_jobs, since
  * route_plans has no total_boxes column by design (normalized schema).
  */
+// แปลงแถวแผนจากฐานข้อมูลให้เป็นสรุปแผน: เวลาตัดเหลือ HH:MM ตัวเลขว่างเป็น 0 และกล่องรวมรับมาจากตารางงาน
 export function toPlanSummary(
   row: PlanRow,
   totalBoxes: number,
@@ -90,6 +92,7 @@ export function toPlanSummary(
 }
 
 /** Pure job mapping (DB-free, unit-tested): stops, customer data, geometry. */
+// แปลงแถวงานจากฐานข้อมูลให้เป็นงานพร้อมจุดส่ง: สถานะงานและ geometry แปลงให้อยู่ในรูปที่ frontend ใช้
 export function toJobResponse(
   job: JobRow,
   stops: StopRow[],
@@ -142,11 +145,13 @@ export function toJobResponse(
 }
 
 /** TIME/"HH:MM" column → "HH:MM" (empty when unknown). */
+// ตัดเวลาให้เหลือ HH:MM (ค่าว่างคืนสตริงว่าง)
 function hhmm(value: string | null): string {
   if (!value) return '';
   return String(value).slice(0, 5);
 }
 
+// แกะ geometry ที่เก็บไว้: รับ string JSON หรือ object ถ้าไม่ใช่ GeoJSON LineString คืน null
 function parseGeometry(value: JobRow['route_geometry']): GeoJsonLineString | null {
   if (!value) return null;
   try {

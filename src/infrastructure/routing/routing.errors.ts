@@ -1,3 +1,4 @@
+// ไฟล์นี้: error ของระบบเส้นทางพร้อมรหัส เช่น TIMEOUT, NO_ROUTE เพื่อให้ผู้เรียกตัดสินใจว่าจะลองใหม่หรือใช้ค่าประมาณ
 /**
  * Meaningful routing errors (infrastructure layer).
  *
@@ -11,10 +12,12 @@ export type RoutingErrorCode =
   | 'NO_ROUTE'
   | 'MALFORMED_RESPONSE';
 
+// คลาส error ของระบบเส้นทาง: เก็บรหัส error (เช่น TIMEOUT, NO_ROUTE) และ HTTP status ถ้ามี
 export class RoutingError extends Error {
   readonly code: RoutingErrorCode;
   readonly status?: number;
 
+// สร้าง error ระบบเส้นทางพร้อมรหัสและข้อความ (ขึ้นต้นด้วย [OSRM รหัส])
   constructor(code: RoutingErrorCode, message: string, status?: number) {
     super(`[OSRM ${code}] ${message}`);
     this.name = 'RoutingError';

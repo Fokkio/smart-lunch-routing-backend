@@ -1,6 +1,8 @@
+// ไฟล์นี้: ตรวจข้อมูลไรเดอร์ก่อนบันทึก และเรียก RiderModel
 import { RiderModel, type Rider, type RiderInput } from '../models/rider.model';
 import { badInput, validateId, validateObject } from './input-validation';
 
+// ตรวจข้อมูลไรเดอร์: ชื่อ 1-150 ตัวอักษร เบอร์ต้องเป็นมือถือไทย 10 หลัก แล้วตัดช่องว่างชื่อและจัดรูปแบบเบอร์
 function validate(input: Partial<RiderInput>, creating = false): Partial<RiderInput> {
   validateObject(input);
   if ((creating && input.name === undefined) || (input.name !== undefined &&
@@ -34,20 +36,25 @@ function handleRiderWriteError(error: unknown): never {
   throw error;
 }
 
+// คลาสตรวจข้อมูลไรเดอร์ก่อนบันทึก แล้วเรียก RiderModel
 export class RiderService {
+// ดึงไรเดอร์ทั้งหมดผ่าน model
   static findAll(): Promise<Rider[]> {
     return RiderModel.findAll();
   }
 
+// ดึงไรเดอร์คนเดียวตาม id: ตรวจก่อนว่า id เป็นจำนวนเต็มบวก
   static findById(id: string): Promise<Rider | null> {
     validateId(id);
     return RiderModel.findById(id);
   }
 
+// ดึงไรเดอร์ที่พร้อมรับงานผ่าน model
   static findAvailable(): Promise<Rider[]> {
     return RiderModel.findAvailable();
   }
 
+// สร้างไรเดอร์ใหม่: ตรวจข้อมูลแบบตอนสร้าง (ชื่อบังคับ) แล้วแปลง error เบอร์ซ้ำเป็น 409
   static async create(input: RiderInput): Promise<Rider> {
     try {
       return await RiderModel.create(validate(input, true) as RiderInput);
@@ -56,6 +63,7 @@ export class RiderService {
     }
   }
 
+// แก้ไขไรเดอร์: ตรวจ id และข้อมูลก่อน แล้วแปลง error เบอร์ซ้ำเป็น 409
   static async update(id: string, input: Partial<RiderInput>): Promise<Rider | null> {
     validateId(id);
     try {
@@ -65,6 +73,7 @@ export class RiderService {
     }
   }
 
+// ลบไรเดอร์: ตรวจ id ก่อน ถ้าฐานข้อมูลปฏิเสธเพราะมีข้อมูลจัดส่งอ้างอิงอยู่แปลงเป็น 409
   static async delete(id: string): Promise<boolean> {
     validateId(id);
     try {

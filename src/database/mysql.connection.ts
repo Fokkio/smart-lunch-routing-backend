@@ -1,9 +1,11 @@
+// ไฟล์นี้: สร้างและดูแล connection pool ไป TiDB/MySQL รวมถึง transaction และการปิด pool
 import fs from 'node:fs';
 import mysql, { type PoolConnection } from 'mysql2/promise';
 import { config, databaseConfigError } from '../config/env';
 
 let pool: mysql.Pool | undefined;
 
+// สร้าง connection pool ครั้งเดียวแล้วคืน pool เดิมทุกครั้ง: ตรวจ config ก่อน ถ้าเปิด SSL ให้ใส่ CA และบังคับตรวจใบรับรอง
 export function getPool(): mysql.Pool {
   if (pool) return pool;
 
@@ -46,6 +48,7 @@ export function getPool(): mysql.Pool {
   return pool;
 }
 
+// ทดลองยืม connection จาก pool แล้วรัน SELECT 1 เพื่อพิสูจน์ว่าเชื่อมฐานข้อมูลได้
 export async function testDatabaseConnection(): Promise<void> {
   const c = await getPool().getConnection();
 
@@ -56,6 +59,7 @@ export async function testDatabaseConnection(): Promise<void> {
   }
 }
 
+// ทดลองเชื่อมฐานข้อมูล: สำเร็จพิมพ์ log ว่า OK และคืน true ไม่สำเร็จพิมพ์เตือนและคืน false
 export const checkConnection = async (): Promise<boolean> => {
   try {
     await testDatabaseConnection();
@@ -67,6 +71,7 @@ export const checkConnection = async (): Promise<boolean> => {
   }
 };
 
+// รันงานที่ส่งมาใน transaction เดียว: สำเร็จ commit ไม่สำเร็จ rollback แล้วคืน connection กลับ pool เสมอ
 export async function withTransaction<T>(
   work: (connection: PoolConnection) => Promise<T>,
 ): Promise<T> {
@@ -85,6 +90,7 @@ export async function withTransaction<T>(
   }
 }
 
+// ปิด connection pool ทั้งหมด (ใช้ตอนปิด server)
 export async function closePool(): Promise<void> {
   if (pool) {
     await pool.end();

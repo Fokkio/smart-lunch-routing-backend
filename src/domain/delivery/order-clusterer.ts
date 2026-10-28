@@ -1,3 +1,4 @@
+// ไฟล์นี้: จัดกลุ่มออเดอร์ที่อยู่ใกล้กันให้ไรเดอร์แต่ละคน และคำนวณจำนวนไรเดอร์ขั้นต่ำ
 import { validateCoordinate, type Coordinate } from '../routing/coordinate';
 import { haversineKmBetween } from '../routing/haversine-distance-calculator';
 import { MAX_ORDERS_PER_RIDER } from './capacity-rule';
@@ -25,6 +26,7 @@ export interface ClusterOrder {
 }
 
 /** Minimum riders so every order fits: `ceil(n / maxOrdersPerRider)`. */
+// คำนวณไรเดอร์ขั้นต่ำ: จำนวนออเดอร์หารด้วยออเดอร์สูงสุดต่อคน แล้วปัดขึ้น
 export function minimumRiderCount(orderCount: number, maxOrdersPerRider = MAX_ORDERS_PER_RIDER): number {
   if (!Number.isInteger(orderCount) || orderCount < 0) {
     throw new Error(`orderCount must be a non-negative integer, got ${orderCount}`);
@@ -36,6 +38,7 @@ export function minimumRiderCount(orderCount: number, maxOrdersPerRider = MAX_OR
 }
 
 /** Group order ids into `riderCount` clusters of at most `maxOrdersPerRider`. */
+// จัดกลุ่มออเดอร์ให้ไรเดอร์: เลือกจุดเริ่มต้น (seed) แล้วจับออเดอร์ที่ใกล้ที่สุดเข้ากลุ่มโดยไม่เกินขีดจำกัดต่อคน
 export function clusterOrders(
   orders: ClusterOrder[],
   shop: Coordinate,

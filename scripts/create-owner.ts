@@ -1,7 +1,10 @@
+// ไฟล์นี้: สร้างบัญชีเจ้าของร้าน หรือตรวจการเข้าสู่ระบบของเจ้าของร้าน
+// รันด้วย: npm run db:create-owner (ใส่ --verify เพื่อตรวจ login แทนการสร้าง)
 import { getPool, closePool } from '../src/database/mysql.connection';
 import { hashPassword, login, verifyPassword } from '../src/middleware/auth';
 import { createHash } from 'node:crypto';
 
+// prompt(label): รับค่าจาก terminal ทีละตัวอักษรโดยไม่แสดงบนหน้าจอ แล้วคืนค่าเป็น string
 async function prompt(label: string): Promise<string> {
   if (!process.stdin.isTTY || !process.stdin.setRawMode) throw new Error('Run in an interactive terminal');
   process.stdout.write(label);
@@ -34,6 +37,7 @@ async function prompt(label: string): Promise<string> {
   });
 }
 
+// main(): สร้างบัญชี OWNER ใหม่ หรือถ้าใส่ --verify จะตรวจ login ของเจ้าของร้านแทน
 async function main(): Promise<void> {
   const username = (process.env['OWNER_USERNAME'] ?? await prompt('Owner username: ')).trim();
   const password = process.env['OWNER_PASSWORD'] ?? await prompt('Owner password (input hidden): ');

@@ -1,3 +1,4 @@
+// ไฟล์นี้: route ใบงานของไรเดอร์ ได้แก่ ดูงาน รับทราบงาน เริ่มงาน และบันทึกว่าส่งจุดไหนแล้ว
 import { Router } from 'express';
 import { RoutePlanModel } from '../models/route-plan.model';
 import type { Identity } from '../middleware/auth';
@@ -24,6 +25,7 @@ riderJobRoutes.get('/', async (req, res, next) => {
 });
 
 for (const action of ['acknowledge','start'] as const) {
+// รับทราบงานหรือเริ่มงานของไรเดอร์ (loop นี้สร้าง 2 route จาก action: acknowledge และ start)
   riderJobRoutes.post(`/:jobId/${action}`,async(req,res,next)=>{
     try{
       const jobId=Number(req.params['jobId']);
@@ -35,6 +37,7 @@ for (const action of ['acknowledge','start'] as const) {
   });
 }
 
+// บันทึกว่าส่งออเดอร์จุดนี้แล้ว: ต้องส่งตามลำดับจุดในงาน
 riderJobRoutes.post('/:jobId/stops/:orderId/deliver', async (req, res, next) => {
   try {
     const jobId = Number(req.params['jobId']);

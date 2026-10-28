@@ -1,3 +1,5 @@
+// ไฟล์นี้: ทดสอบระบบจริงบนฐานข้อมูลจริงด้วยข้อมูล QA ที่มีป้ายกำกับชัดเจนเท่านั้น
+// รันด้วย: npx tsx scripts/qa-live.ts โดยต้องตั้ง QA_ALLOW_REAL_DB=yes ก่อนเสมอ
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -12,6 +14,7 @@ import { startRoutingFixture } from './qa-routing-fixture';
 
 // Explicit opt-in: creates ONLY labelled QA records on the configured real database.
 // Leaves delivery evidence, disables QA accounts and revokes their sessions afterwards.
+// main(): สร้างบัญชี QA ชั่วคราว ทดสอบ API และหน้าจอจริง แล้วเก็บกวาดบัญชี QA ทิ้งตอนจบ
 async function main() {
   assert.equal(process.env.QA_ALLOW_REAL_DB,'yes','Set QA_ALLOW_REAL_DB=yes after authorizing QA data');
   const fixtureRouting = process.env.QA_ROUTING_FIXTURE === 'yes';
@@ -23,6 +26,7 @@ async function main() {
   await db.execute<ResultSetHeader>('INSERT INTO admin_users(username,display_name,password_hash,role,is_active) VALUES(?,?,?,\'OWNER\',TRUE)',[run,`QA ${run}`,await hashPassword(password)]);
   const server=createApp().listen(4311,'127.0.0.1');
   await new Promise<void>(ready=>server.once('listening',ready));
+  // api(): เรียก API ทดสอบบนเซิร์ฟเวอร์ local ตรวจ status code ที่คาดไว้ แล้วคืนผลเป็น JSON
   const api=async(path:string,token?:string,body?:unknown,method=body===undefined?'GET':'POST',status=200):Promise<any>=>{
     const result=await fetch(`http://127.0.0.1:4311/api${path}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(45000)});
     const text=await result.text();

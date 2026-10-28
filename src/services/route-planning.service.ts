@@ -1,3 +1,4 @@
+// ไฟล์นี้: ขั้นตอนวางแผนหลัก โหลดออเดอร์ค้างส่ง จัดกลุ่ม เรียงจุด ตรวจเส้นตาย ประกอบแผน แล้วบันทึก
 import { config } from '../config/env';
 import { clusterOrders, minimumRiderCount, type ClusterOrder } from '../domain/delivery/order-clusterer';
 import {
@@ -36,8 +37,10 @@ import { findAlternativeRoutes, routeSignature } from '../domain/delivery/altern
  * 14.   infeasible → throw (never persisted as valid)
  * 15.   revenue/food/delivery/profit → 16. assemble → 17. persist
  */
+// คลาสขั้นตอนวางแผนหลัก: โหลดออเดอร์ค้างส่ง จัดกลุ่ม เรียงจุด ตรวจเส้นตาย ประกอบแผน แล้วบันทึก
 export class RoutePlanningService {
   /** Generate and persist a NEW plan (never overwrites previous plans). */
+// สร้างและบันทึกแผนใหม่: โหลดออเดอร์ค้างส่งและไรเดอร์ที่ว่าง ขอตารางระยะทาง จัดกลุ่ม เรียงจุด ตรวจเส้นตาย (ไรเดอร์ไม่พอให้เพิ่มจำนวน) ประกอบแผนแล้วบันทึก ถ้าทำไม่ได้โยน InfeasiblePlanError
   static async generate(planDate: string, options: { seedOffset?: number; startTime?: string; deadline?: string;orderIds?:number[]; excluded?: string } = {}): Promise<RoutePlanResponse> {
     const started = Date.now();
     const settings = await ShopSettingsModel.get();
@@ -90,6 +93,7 @@ export class RoutePlanningService {
     const clusterInput: ClusterOrder[] = detailed.map((o) => ({
       id: String(o.orderId), coordinate: { latitude: o.latitude, longitude: o.longitude },
     }));
+// สร้างแผนทางเลือก: เรียก findAlternativeRoutes โดยตัดกลุ่มที่เคยลองแล้วออก
     const alternative = (excluded: string | string[]) => findAlternativeRoutes({
       orders: clusterInput, boxes: new Map(detailed.map(order => [String(order.orderId), order.boxCount])), shop, matrix,
       maxOrders, riderCount: riders.length, availableMinutes: (deadlineSeconds - startSeconds) / 60,
@@ -175,6 +179,7 @@ export class RoutePlanningService {
   }
 
   /** Search distinct feasible groupings against the current draft before persisting. */
+// สร้างแผนทางเลือกจากแผนเดิม: แผนเดิมต้องยังเป็นฉบับร่างของวันเดียวกัน แล้วสร้างแผนใหม่โดยตัดกลุ่มของแผนเดิมออก
   static async generateAlternative(planDate: string, options: {startTime?:string;deadline?:string;orderIds?:number[];basePlanId?:number} = {}): Promise<RoutePlanResponse> {
     if (!Number.isSafeInteger(options.basePlanId) || options.basePlanId! < 1) badInput('basePlanId must identify the current draft');
     const base = await RoutePlanModel.findFull(options.basePlanId!);
@@ -186,23 +191,28 @@ export class RoutePlanningService {
       excluded: routeSignature(base.jobs.map(job => job.stops.map(stop => String(stop.orderId)))) });
   }
 
+// แสดงสรุปแผนทั้งหมดผ่าน model กรองตามวันที่ได้
   static list(planDate?: string): Promise<RoutePlanSummaryResponse[]> {
     return RoutePlanModel.list(planDate);
   }
 
+// ดึงแผนฉบับเต็มตาม id ผ่าน model
   static findById(id: number): Promise<RoutePlanResponse | null> {
     return RoutePlanModel.findFull(id);
   }
 
+// เลือกแผนตาม id พร้อมกำหนดไรเดอร์ให้แต่ละงานผ่าน model
   static select(id: number, assignments?: JobAssignment[]): Promise<RoutePlanResponse | null> {
     return RoutePlanModel.select(id, assignments);
   }
 
+// ลบแผนตาม id ผ่าน model (ลบได้เฉพาะแผนฉบับร่างตามกฎของ model)
   static delete(id: number): Promise<boolean> {
     return RoutePlanModel.deleteById(id);
   }
 }
 
+// หาพิกัดของออเดอร์ตาม id จากรายการออเดอร์ที่โหลดไว้แล้ว
 function orderCoord(orders: AssembleOrder[], id: string): Coordinate {
   const order = orders.find((o) => String(o.orderId) === id)!;
   return { latitude: order.latitude, longitude: order.longitude };

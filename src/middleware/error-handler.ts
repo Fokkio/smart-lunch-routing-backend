@@ -1,3 +1,4 @@
+// ไฟล์นี้: ตัวจัดการ error ส่วนกลางของ Express แปลง error ให้เป็น response ที่มี status ที่เหมาะสม
 import type { NextFunction, Request, Response } from 'express';
 
 /**
@@ -5,6 +6,7 @@ import type { NextFunction, Request, Response } from 'express';
  * Controllers pass errors via next(err); this middleware formats the response.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
+// จัดการ error ส่วนกลาง: ดู status จาก error ถ้าเป็น 400-599 ใช้ค่านั้น ถ้า config ฐานข้อมูลขาดตอบ 503 นอกนั้นตอบ 500 โดยไม่เปิดเผยข้อความภายใน
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
   const message = err instanceof Error ? err.message : 'Internal server error';
   const statusCode = err && typeof err === 'object' ? (err as { statusCode?: unknown; status?: unknown }).statusCode ?? (err as { status?: unknown }).status : undefined;

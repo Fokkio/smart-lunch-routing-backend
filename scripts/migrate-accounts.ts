@@ -1,6 +1,9 @@
+// ไฟล์นี้: เตรียมตารางบัญชีผู้ใช้ เซสชัน และความพยายามเข้าสู่ระบบให้พร้อมใช้งาน
+// รันด้วย: npm run db:migrate:accounts
 import type { RowDataPacket } from 'mysql2/promise';
 import { closePool, getPool } from '../src/database/mysql.connection';
 
+// columnExists(table, column): ตรวจว่าตารางที่ระบุมีคอลัมน์นี้อยู่แล้วหรือไม่
 async function columnExists(table: string, column: string): Promise<boolean> {
   const [rows] = await getPool().execute<RowDataPacket[]>(
     `SELECT 1 FROM information_schema.columns
@@ -9,6 +12,7 @@ async function columnExists(table: string, column: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+// indexExists(table, index): ตรวจว่าตารางที่ระบุมี index ชื่อนี้อยู่แล้วหรือไม่
 async function indexExists(table: string, index: string): Promise<boolean> {
   const [rows] = await getPool().execute<RowDataPacket[]>(
     'SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? AND index_name=? LIMIT 1',
@@ -17,6 +21,7 @@ async function indexExists(table: string, index: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+// main(): สร้างหรือเติมตาราง admin_users, auth_sessions, auth_login_attempts และคอลัมน์บัญชีของ riders
 async function main(): Promise<void> {
   await getPool().query(`CREATE TABLE IF NOT EXISTS admin_users (
     admin_user_id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(100) NOT NULL UNIQUE,

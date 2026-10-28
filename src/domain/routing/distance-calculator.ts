@@ -1,3 +1,4 @@
+// ไฟล์นี้: คำนวณระยะทางเส้นตรงแบบ haversine และปัดทศนิยม 2 ตำแหน่ง
 import type { Coordinate } from './coordinate';
 import { haversineKmBetween } from './haversine-distance-calculator';
 import type { RoutePoint } from './route.types';
@@ -32,6 +33,7 @@ export { DistanceMatrixBuilder } from './distance-matrix';
  * Straight-line great-circle distance in kilometres between two points.
  * Delegates to the domain Haversine implementation (R = 6371.0088 km).
  */
+// คำนวณระยะทางเส้นตรงระหว่างจุด 2 จุดแบบ haversine -> กิโลเมตร
 export function haversineKm(a: RoutePoint, b: RoutePoint): number {
   const from: Coordinate = { latitude: a.lat, longitude: a.lng };
   const to: Coordinate = { latitude: b.lat, longitude: b.lng };
@@ -39,6 +41,7 @@ export function haversineKm(a: RoutePoint, b: RoutePoint): number {
 }
 
 /** Round to 2 decimals for stable API output (matches frontend rounding). */
+// ปัดตัวเลขให้เป็นทศนิยม 2 ตำแหน่ง
 export function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }

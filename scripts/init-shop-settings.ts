@@ -1,3 +1,5 @@
+// ไฟล์นี้: ใส่ค่าตั้งร้านเริ่มต้น (setting_id=1) ถ้ายังไม่มีในฐานข้อมูล
+// รันด้วย: npm run db:seed หรือ npm run db:init-settings
 import { type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
 import { closePool, getPool } from '../src/database/mysql.connection';
 
@@ -35,6 +37,7 @@ const DEFAULT_SHOP_SETTINGS: DefaultShopSettings = {
   riderCostPerKm: 2,
 };
 
+// main(): ถ้ายังไม่มี setting_id=1 ให้ใส่ค่าตั้งร้านเริ่มต้น ถ้ามีอยู่แล้วจะไม่เปลี่ยนแปลงอะไร
 async function main(): Promise<void> {
   const pool = getPool();
   const [existing] = await pool.query<CountRow[]>(

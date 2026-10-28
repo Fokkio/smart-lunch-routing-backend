@@ -1,8 +1,11 @@
+// ไฟล์นี้: เก็บกวาดข้อมูลทดสอบ QA หลังทดสอบเสร็จ โดยไม่แตะข้อมูลจริง
+// รันด้วย: npx tsx scripts/qa-cleanup.ts <รหัส QA run> หรือถูกเรียกจาก qa-live.ts
 import assert from 'node:assert/strict';
 import type { RowDataPacket } from 'mysql2/promise';
 import {closePool,withTransaction} from '../src/database/mysql.connection';
 import {lockPlanning} from '../src/models/plan-inputs';
 
+// cleanupQaRun(run): ยกเลิกงาน QA ที่ยังไม่จบและปิดบัญชี QA ของ run นี้เท่านั้น โดยเก็บหลักฐานไว้ ไม่แตะข้อมูลจริง
 /** Retain QA evidence; cancel unfinished QA work and disable only explicitly named test accounts. */
 export async function cleanupQaRun(run:string):Promise<void> {
   assert(/^qa_[a-z0-9]+_[a-f0-9]{6}$/.test(run),'An exact QA run ID is required');

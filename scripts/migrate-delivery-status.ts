@@ -1,6 +1,9 @@
+// ไฟล์นี้: เพิ่มสถานะงานส่งของใหม่โดยไม่ลบสถานะเก่าหรือประวัติเดิม
+// รันด้วย: npm run db:migrate:delivery-status
 import type { RowDataPacket } from 'mysql2/promise';
 import { closePool, getPool } from '../src/database/mysql.connection';
 
+// migrateDeliveryStatus(): เพิ่มสถานะ WAITING/COMPLETED ให้ delivery_jobs.status โดยไม่ลบค่าเก่า
 /** Add current statuses without removing legacy enum values or rewriting delivery history. */
 export async function migrateDeliveryStatus():Promise<void> {
   const [rows]=await getPool().execute<RowDataPacket[]>(`SELECT column_type AS statusType,column_default AS defaultValue,is_nullable AS nullable

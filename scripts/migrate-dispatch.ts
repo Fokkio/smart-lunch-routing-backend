@@ -1,8 +1,11 @@
+// ไฟล์นี้: เตรียมฐานข้อมูลสำหรับงานจ่ายงานไรเดอร์ (acknowledge และเวลาต่อจุด)
+// รันด้วย: npm run db:migrate:dispatch
 import {closePool,getPool,withTransaction} from '../src/database/mysql.connection';
 import {lockPlanning} from '../src/models/plan-inputs';
 import type {RowDataPacket} from 'mysql2/promise';
 import {migrateDeliveryStatus} from './migrate-delivery-status';
 
+// migrateDispatch(): เรียกย้ายสถานะงานส่งก่อน แล้วเติมคอลัมน์ dispatch และเปลี่ยนแผนร่างเก่าเป็น REJECTED
 export async function migrateDispatch():Promise<void>{
   await migrateDeliveryStatus();
   for(const [table,column,definition] of [

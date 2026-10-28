@@ -1,3 +1,4 @@
+// ไฟล์นี้: สร้างตารางระยะทางระหว่างจุดทุกคู่จากตัวคำนวณระยะทางที่ส่งเข้ามา
 import { validateCoordinate } from './coordinate';
 import type {
   DistanceCalculator,
@@ -21,7 +22,9 @@ import type {
  * mirrored calls in the future, but the generic builder must not assume
  * symmetry.
  */
+// คลาสสร้างตารางระยะทาง: เรียกตัวคำนวณระยะทางทุกคู่ตามลำดับจุดที่ส่งมา
 export class DistanceMatrixBuilder {
+// สร้างตารางระยะทาง: จุด -> จุดทุกคู่ (จุดเดียวกันเป็น 0) แล้วคืนพร้อมลำดับ pointIds และแหล่งที่มา
   static async build(
     points: MatrixPoint[],
     calculator: DistanceCalculator,

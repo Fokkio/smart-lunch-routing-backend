@@ -1,3 +1,4 @@
+// ไฟล์นี้: SQL ของตารางออเดอร์ รวมถึงออเดอร์จำลอง และการป้องกันไม่ให้ลบออเดอร์ที่อยู่ในแผนที่ยืนยันแล้ว
 import { type PoolConnection, type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
 import { getPool, withTransaction } from '../database/mysql.connection';
 import { toISODate, todayLocal } from './dates';
@@ -44,6 +45,7 @@ type NearbyRow = Row & {
   distance_km: number;
 };
 
+// แปลงแถวออเดอร์จากฐานข้อมูลให้เป็น object ออเดอร์ที่ใช้ในโค้ด
 const map = (row: Row): Order => ({
   id: row.order_id,
   customerId: row.customer_id,
@@ -54,7 +56,9 @@ const map = (row: Row): Order => ({
   createdAt: row.created_at?.toISOString(),
 });
 
+// คลาส SQL ของตารางออเดอร์
 export class OrderModel {
+// ดึงออเดอร์ทั้งหมด กรองตามวันที่ สถานะ และลูกค้าได้ เรียงตามวันที่และ id จากมากไปน้อย
   static async findAll(filter: OrderFilter = {}): Promise<Order[]> {
     const where: string[] = [];
     const values: string[] = [];
@@ -68,10 +72,12 @@ export class OrderModel {
     return rows.map(map);
   }
 
+// ดึงออเดอร์ที่ยังค้างส่ง (PENDING) ทั้งหมด
   static findPending(): Promise<Order[]> {
     return this.findAll({ status: 'PENDING' });
   }
 
+// ดึงออเดอร์ที่อยู่ในรัศมีที่กำหนด: คำนวณระยะทาง haversine ใน SQL พร้อมชื่อและพิกัดลูกค้า เรียงจากใกล้ไปไกล
   static async findNearby(lat: number, lng: number, radiusKm: number, filter: OrderFilter = {}): Promise<NearbyOrder[]> {
     const where: string[] = [];
     const values: (number | string)[] = [lat, lat, lng];
@@ -101,11 +107,13 @@ export class OrderModel {
     }));
   }
 
+// ดึงออเดอร์เดียวตาม id ถ้าไม่เจอคืน null
   static async findById(id: string): Promise<Order | null> {
     const [rows] = await getPool().execute<Row[]>('SELECT * FROM orders WHERE order_id=?', [id]);
     return rows[0] ? map(rows[0]) : null;
   }
 
+// เพิ่มออเดอร์ใหม่: วันที่ว่างใช้วันนี้ สถานะว่างใช้ PENDING แล้วดึงแถวที่สร้างกลับมา
   static async create(input: OrderInput): Promise<Order> {
     const [result] = await getPool().execute<ResultSetHeader>(
       'INSERT INTO orders(customer_id,order_date,box_count,status,is_simulated) VALUES(?,?,?,?,FALSE)',
@@ -114,6 +122,7 @@ export class OrderModel {
     return (await this.findById(String(result.insertId)))!;
   }
 
+// สร้างออเดอร์จำลอง: วนลูกค้าทั้งหมดตามลำดับ กล่องวน 1-3 กล่อง สถานะ PENDING และติดป้ายจำลอง
   static async createSimulated(count: number, orderDate: string): Promise<Order[]> {
     const ids = await withTransaction(async (connection) => {
       const [customers] = await connection.query<CustomerIdRow[]>(
@@ -146,6 +155,7 @@ export class OrderModel {
    * รอบที่ยืนยันแล้ว (SELECTED) ยังห้ามลบ (409) แต่รอบฉบับร่าง (GENERATED/REJECTED)
    * ที่อ้างถึงจะถูกล้างซ้ำอัตโนมัติ เส้นทางร่างจะถูกคำนวณใหม่อยู่แล้ว
    */
+// ลบออเดอร์จำลองเป็นชุดใน transaction เดียว: ห้ามลบถ้าอยู่ในแผนที่ยืนยันแล้ว แต่ล้างการอ้างอิงจากแผนฉบับร่างก่อน
   static async deleteSimulated(orderIds: number[]): Promise<number> {
     return withTransaction(async (conn) => {
       await lockPlanning(conn);
@@ -166,6 +176,7 @@ export class OrderModel {
     });
   }
 
+// แก้ไขออเดอร์: ล็อกตอนวางแผน กันการแก้ข้อมูลที่อยู่ในแผนที่ยืนยันแล้ว และออเดอร์ที่ส่งแล้วแก้ได้ผ่านใบงานเท่านั้น
   static async update(id: string, input: Partial<OrderInput>): Promise<Order | null> {
     await withTransaction(async conn => {
       await lockPlanning(conn);
@@ -187,6 +198,7 @@ export class OrderModel {
    * ที่อ้างถึงให้ก่อน — รอบเหล่านี้ถูกคำนวณใหม่อยู่แล้ว — แต่ยังห้ามลบ
    * ออเดอร์ที่อยู่ในรอบที่ยืนยันแล้ว (SELECTED) เพื่อรักษาประวัติการจัดส่ง
    */
+// ลบออเดอร์เดียว: ห้ามลบถ้าอยู่ในแผนที่ยืนยันแล้ว แต่ล้างการอ้างอิงจากแผนฉบับร่างก่อน แล้วคืนว่าได้ลบจริงหรือไม่
   static async delete(id: string): Promise<boolean> {
     return withTransaction(async (conn) => {
       await lockPlanning(conn);
@@ -201,6 +213,7 @@ export class OrderModel {
 }
 
 /** ออเดอร์ที่อยู่ในแผนยืนยันแล้วจะลบไม่ได้ — ตอบ 409 ตามเดิม */
+// กันการลบ: ถ้าออเดอร์อยู่ในแผนที่ยืนยันแล้วโยน error 409
 async function guardConfirmedPlanReference(conn: PoolConnection, orderIds: number[]): Promise<void> {
   const placeholders = orderIds.map(() => '?').join(',');
   const [rows] = await conn.execute<RowDataPacket[]>(
@@ -218,6 +231,7 @@ async function guardConfirmedPlanReference(conn: PoolConnection, orderIds: numbe
 }
 
 /** ล้างการอ้างอิงของออเดอร์ออกจากรอบฉบับร่าง และตัดใบงานร่างที่เหลือ 0 ออเดอร์ทิ้ง */
+// ล้างการอ้างอิงของออเดอร์ออกจากแผนฉบับร่าง และตัดใบงานร่างที่เหลือ 0 ออเดอร์ทิ้ง
 async function discardDraftReferences(conn: PoolConnection, orderIds: number[]): Promise<void> {
   const placeholders = orderIds.map(() => '?').join(',');
   await conn.execute(

@@ -1,3 +1,4 @@
+// ไฟล์นี้: ตัววางแผนรุ่นต้นแบบแบบง่าย (ปัจจุบัน service จริงไม่ได้ใช้ มีแค่ script ตรวจสอบที่เรียกใช้)
 import { CapacityRule } from '../delivery/capacity-rule';
 import { haversineKm, round2 } from './distance-calculator';
 import type {
@@ -43,7 +44,9 @@ export interface PlanOptions {
 
 export const DEFAULT_SHOP = { lat: 16.24631, lng: 103.25286 } as const;
 
+// คลาสวางแผนรุ่นต้นแบบแบบง่าย: เติมออเดอร์ให้ไรเดอร์ตามลำดับแล้วเดินจุดใกล้สุดก่อน (ปัจจุบัน service จริงไม่ได้ใช้คลาสนี้)
 export class RoutePlanner {
+// วางแผนแบบง่าย: ออเดอร์ -> ไรเดอร์ตามลำดับไม่เกินขีดจำกัด แล้วเรียงจุดด้วยวิธีจุดใกล้สุดถัดไป
   static plan(
     orders: PlanningOrder[],
     riders: PlanningRider[],
@@ -97,6 +100,7 @@ export class RoutePlanner {
     return { assignments, totalDistanceKm, unassignedOrderIds };
   }
 
+  // เรียงจุดส่งในกลุ่มด้วยวิธีจุดใกล้สุดถัดไป: จากร้านไปจุดที่ใกล้ที่สุดก่อน แล้วไปจุดใกล้สุดจากจุดนั้นต่อ
   private static orderStopsNearestNeighbour(
     group: PlanningOrder[],
     shop: { lat: number; lng: number },

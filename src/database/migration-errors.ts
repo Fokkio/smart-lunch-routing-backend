@@ -1,3 +1,4 @@
+// ไฟล์นี้: ดูว่า error ตอนรัน migration คือคอลัมน์ที่มีอยู่แล้วหรือไม่ จะได้ข้ามได้อย่างปลอดภัย
 /**
  * Migration repeatability helper.
  *
@@ -6,6 +7,7 @@
  * columns that already exist. That specific error means "already applied"
  * and is safe to skip — every other error still aborts the migration.
  */
+// ดูว่า error คือรหัส ER_DUP_FIELDNAME (คอลัมน์มีอยู่แล้ว) หรือไม่ ถ้าใช่แปลว่า migration นั้นรันไปแล้ว
 export function isAlreadyAppliedError(error: unknown): boolean {
   return (
     typeof error === 'object' &&

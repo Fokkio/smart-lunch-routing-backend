@@ -1,3 +1,4 @@
+// ไฟล์นี้: กลยุทธ์สำรองของระบบเส้นทาง ลอง OSRM ก่อน ถ้าไม่ได้ให้ใช้ haversine แล้วติดป้ายว่าเป็นค่าประมาณ
 import { validateCoordinate, type Coordinate } from '../../domain/routing/coordinate';
 import type {
   DistanceCalculator,
@@ -22,10 +23,12 @@ import { RoutingError } from './routing.errors';
  * (`distance / speed * 60`, exact — no rounding here):
  * never a hardcoded constant, never a DB read inside pure code.
  */
+// คำนวณเวลาเดินทางจากระยะทางและความเร็วแบบไม่ปัดเศษ: ระยะทาง / ความเร็ว * 60
 export function estimateDurationMinutesExact(distanceKm: number, speedKmh: number): number {
   return (distanceKm / speedKmh) * 60;
 }
 
+// คลาสคำนวณระยะทางแบบมีสำรอง: ลองตัวหลักก่อน ถ้าเป็น RoutingError ให้ใช้ haversine แล้วติดป้าย approximate
 export class FallbackDistanceCalculator implements DistanceCalculator {
   /**
    * Preferred (primary) source. The per-result `source` field is
@@ -40,6 +43,7 @@ export class FallbackDistanceCalculator implements DistanceCalculator {
     private readonly fallback = new HaversineDistanceCalculator(),
   ) {}
 
+// คำนวณระยะทางคู่เดียว: สำเร็จคืนผลจากตัวหลัก ไม่สำเร็จคืนผล haversine พร้อมเหตุผลสำรอง
   async calculate(from: Coordinate, to: Coordinate): Promise<DistanceResult> {
     try {
       const result = await this.primary.calculate(from, to);
@@ -66,6 +70,7 @@ export class FallbackDistanceCalculator implements DistanceCalculator {
  * Travel matrix with fallback: one OSRM Table call, else a Haversine +
  * speed-estimated matrix (same shape, `approximate: true`).
  */
+// ขอตารางระยะทาง: สำเร็จคืนตารางจาก OSRM ไม่สำเร็จสร้างตาราง haversine รูปเดียวกันแล้วติดป้าย approximate
 export async function fetchTravelMatrixWithFallback(
   points: MatrixPoint[],
   dependencies: {
@@ -112,6 +117,7 @@ export async function fetchTravelMatrixWithFallback(
  * matrix totals plus an approximate display line. Only `RoutingError` is
  * swallowed; programming bugs still throw.
  */
+// ขอเส้นถนนแบบไม่ให้พัง: สำเร็จคืนเส้นทางจาก OSRM ไม่สำเร็จคืนเครื่องหมาย geometry ว่างเพื่อให้ผู้เรียกใช้เส้นประมาณแทน
 export async function fetchRouteGeometrySafe(
   points: Coordinate[],
   routeProvider: OsrmRouteProvider,

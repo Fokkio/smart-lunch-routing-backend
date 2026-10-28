@@ -1,3 +1,4 @@
+// ไฟล์นี้: คำนวณระยะทางเส้นตรงบนผิวโลกแบบ haversine ใช้เป็นตัวสำรองตอน OSRM ใช้ไม่ได้
 import { validateCoordinate, type Coordinate } from './coordinate';
 import type { DistanceCalculator, DistanceResult } from './distance.types';
 
@@ -12,9 +13,11 @@ import type { DistanceCalculator, DistanceResult } from './distance.types';
  * pre-clustering. Do NOT label its output "actual route distance" —
  * real road routing (OSRM) will replace it where roads matter.
  */
+// คลาสคำนวณระยะทางเส้นตรงแบบ haversine ไม่ใช้เครือข่าย
 export class HaversineDistanceCalculator implements DistanceCalculator {
   readonly source = 'HAVERSINE' as const;
 
+// คำนวณระยะทางเส้นตรงระหว่าง 2 พิกัด: คืนระยะทางกิโลเมตร แหล่งที่มา HAVERSINE และระบุว่าเป็นค่าประมาณ
   async calculate(from: Coordinate, to: Coordinate): Promise<DistanceResult> {
     validateCoordinate(from);
     validateCoordinate(to);
@@ -28,6 +31,7 @@ export class HaversineDistanceCalculator implements DistanceCalculator {
  */
 export const EARTH_MEAN_RADIUS_KM = 6371.0088;
 
+// แปลงองศาเป็นเรเดียน (ใช้ในสูตร haversine)
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
@@ -41,6 +45,7 @@ function toRadians(degrees: number): number {
  *   c = 2·atan2(√a, √(1−a))
  *   distance = R·c
  */
+// คำนวณระยะทางเส้นตรงระหว่าง 2 พิกัดแบบ haversine -> กิโลเมตร (ฟังก์ชันตรง ๆ ไม่ผ่านคลาส)
 export function haversineKmBetween(from: Coordinate, to: Coordinate): number {
   validateCoordinate(from);
   validateCoordinate(to);

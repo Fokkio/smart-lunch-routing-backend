@@ -1,9 +1,12 @@
+// ไฟล์นี้: ย้ายข้อมูลแผนเก่าให้อยู่ในรูปแบบใหม่ พร้อมเก็บ snapshot ของแผนที่เลือกไว้
+// รันด้วย: npm run db:migrate:review
 import type { RowDataPacket } from 'mysql2/promise';
 import { closePool, getPool, withTransaction } from '../src/database/mysql.connection';
 import { RoutePlanModel } from '../src/models/route-plan.model';
 import { ShopSettingsModel } from '../src/models/shop-settings.model';
 import { lockPlanning, snapshotStop } from '../src/models/plan-inputs';
 
+// migrateReview(): ตรวจเบอร์ซ้ำ เติม input_snapshot ใส่ unique เบอร์ และปรับ foreign key ของไรเดอร์เป็น RESTRICT
 export async function migrateReview(): Promise<void> {
   // Fail before DDL if uniqueness would require changing customer data.
   for (const table of ['customers', 'riders'] as const) {

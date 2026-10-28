@@ -1,3 +1,4 @@
+// ไฟล์นี้: ขอเส้นถนนพร้อม geometry แบบ GeoJSON ผ่าน OSRM Route service
 import type { Coordinate } from '../../domain/routing/coordinate';
 import type { GeoJsonLineString } from '../../domain/routing/distance.types';
 import { OsrmClient } from './osrm.client';
@@ -21,9 +22,12 @@ export interface RouteGeometry {
  * `[longitude, latitude]` order — conversion to Leaflet `[lat, lng]`
  * happens in Angular, never here.
  */
+// คลาสขอเส้นถนนพร้อม geometry จาก OSRM Route service
 export class OsrmRouteProvider {
+// เก็บ client OSRM ไว้ขอเส้นถนน
   constructor(private readonly client: OsrmClient) {}
 
+// ขอเส้นถนนตามลำดับจุด: เมตร -> กิโลเมตร วินาที -> นาที พร้อม geometry แบบ GeoJSON
   async fetchRoute(points: Coordinate[]): Promise<RouteGeometry> {
     const route = await this.client.getRoute(points);
     return {

@@ -1,3 +1,4 @@
+// ไฟล์นี้: route ดูและแก้ค่าตั้งร้าน
 import { Router } from 'express';
 import { ShopSettingsModel } from '../models/shop-settings.model';
 import { validateSettings } from '../services/shop-settings-validation';

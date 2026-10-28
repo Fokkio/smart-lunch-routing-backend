@@ -1,3 +1,4 @@
+// ไฟล์นี้: ขอตารางระยะทางทุกคู่ในครั้งเดียวผ่าน OSRM Table service
 import type {
   MatrixPoint,
   TravelMatrix,
@@ -12,9 +13,12 @@ import { RoutingError } from './routing.errors';
  * never N² individual route calls). Asymmetric values are preserved
  * as returned; a `null` cell means OSRM found no route for that pair.
  */
+// คลาสขอตารางระยะทางจาก OSRM Table service ในครั้งเดียว
 export class OsrmTableProvider {
+// เก็บ client OSRM ไว้ขอตารางระยะทาง
   constructor(private readonly client: OsrmClient) {}
 
+// ขอตารางระยะทาง: เมตร -> กิโลเมตร วินาที -> นาที ถ้าคู่ใดไม่มีเส้นทางโยน RoutingError NO_ROUTE
   async fetchMatrix(points: MatrixPoint[]): Promise<TravelMatrix> {
     const table = await this.client.getTable(points.map((p) => p.coordinate));
     const n = points.length;

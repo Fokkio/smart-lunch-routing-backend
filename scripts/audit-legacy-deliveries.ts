@@ -1,6 +1,9 @@
+// ไฟล์นี้: ตรวจสอบตาราง deliveries เก่าว่ายังมีข้อมูลหรือถูกอ้างถึงอยู่หรือไม่
+// รันด้วย: npx tsx scripts/audit-legacy-deliveries.ts
 import type { RowDataPacket } from 'mysql2/promise';
 import { closePool, getPool } from '../src/database/mysql.connection';
 
+// main(): นับแถวในตาราง deliveries เก่าและนับ foreign key ที่อ้างถึงตารางนี้ แล้วพิมพ์ผล
 async function main(): Promise<void> {
   const [rows] = await getPool().query<(RowDataPacket & { count: number })[]>('SELECT COUNT(*) AS count FROM deliveries');
   const [references] = await getPool().query<RowDataPacket[]>(

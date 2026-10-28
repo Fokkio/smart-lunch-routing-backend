@@ -1,3 +1,4 @@
+// ไฟล์นี้: SQL ของตารางตั้งค่าร้านแถวเดียว (setting_id = 1) ได้แก่ ชื่อร้าน พิกัด เวลาส่ง และราคาต้นทุน
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { getPool, withTransaction } from '../database/mysql.connection';
 import { lockPlanning } from './plan-inputs';
@@ -7,6 +8,7 @@ export type ShopSettings = {
  deliveryDeadline:string; maxOrdersPerRider:number; riderSpeedKmh:number; boxSalePrice:number;
  boxFoodCost:number; riderBaseCost:number; riderCostPerKm:number;stopServiceMinutes?:number;
 };
+// แปลงแถวตั้งค่าร้านจากฐานข้อมูลให้เป็น object ค่าตั้งร้านที่ใช้ในโค้ด
 function map(r:RowDataPacket):ShopSettings {
  return {settingId:r.setting_id,shopName:r.shop_name,latitude:Number(r.latitude),longitude:Number(r.longitude),
  deliveryStartTime:String(r.delivery_start_time),deliveryDeadline:String(r.delivery_deadline),
@@ -14,12 +16,15 @@ function map(r:RowDataPacket):ShopSettings {
  boxSalePrice:Number(r.box_sale_price),boxFoodCost:Number(r.box_food_cost),
  riderBaseCost:Number(r.rider_base_cost),riderCostPerKm:Number(r.rider_cost_per_km),stopServiceMinutes:Number(r.stop_service_minutes??0)};
 }
+// คลาส SQL ของตารางตั้งค่าร้านแถวเดียว (setting_id = 1)
 export class ShopSettingsModel {
+// ดึงค่าตั้งร้านแถวเดียว: ถ้าไม่มีแถวโยน error ให้รัน db:seed ก่อน
  static async get(conn?:PoolConnection):Promise<ShopSettings> {
   const [rows]=await (conn??getPool()).query<RowDataPacket[]>('SELECT * FROM shop_settings WHERE setting_id=1');
   if(!rows[0])throw new Error('shop_settings row 1 is missing; run db:seed.');
   return map(rows[0]);
  }
+// แก้ค่าตั้งร้าน: ล็อกตอนวางแผน ตรวจค่าก่อน กันการแก้ถ้ามีแผนเก่าที่ยังไม่มี snapshot แล้วเปลี่ยนแผนฉบับร่างทั้งหมดเป็น REJECTED
  static async update(input:Partial<ShopSettings>):Promise<ShopSettings> {
   return withTransaction(async conn=>{
    await lockPlanning(conn);

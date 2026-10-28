@@ -1,3 +1,4 @@
+// ไฟล์นี้: ผูก path ของไรเดอร์เข้ากับ RiderController พร้อม route ตั้งรหัสผ่านและบัญชีไรเดอร์
 import { Router } from 'express';
 import { RiderController } from '../controllers/rider.controller';
 import { hashPassword, normalizeRiderUsername } from '../middleware/auth';
@@ -11,6 +12,7 @@ riderRoutes.get('/', RiderController.list);
 riderRoutes.post('/', RiderController.create);
 riderRoutes.put('/:id', RiderController.update);
 riderRoutes.delete('/:id', RiderController.delete);
+// ตั้งรหัสผ่านให้ไรเดอร์: hash รหัสใหม่ เปิดให้ล็อกอิน แล้วลบ session เดิมของไรเดอร์คนนี้
 riderRoutes.put('/:id/password', async (req, res, next) => {
   try {
     const id = Number(req.params['id']);
@@ -32,6 +34,7 @@ riderRoutes.put('/:id/password', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// ตั้งชื่อผู้ใช้และบัญชีไรเดอร์: ชื่อต้องผ่านรูปแบบ และต้องมีรหัสผ่านเดิมหรือรหัสใหม่
 riderRoutes.put('/:id/account', async (req, res, next) => {
   try {
     const id = Number(req.params['id']);

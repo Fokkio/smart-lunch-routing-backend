@@ -1,3 +1,4 @@
+// ไฟล์นี้: คิดเงินล้วน ๆ ไม่แตะฐานข้อมูลหรือ HTTP ได้แก่ รายรับ ต้นทุนอาหาร ค่าส่ง และกำไร
 /**
  * Cost calculation (pure domain — money only, no routing or HTTP).
  *
@@ -34,6 +35,7 @@ export interface PlanCosts {
   jobDeliveryCosts: number[];
 }
 
+// คิดเงินทั้งแผน: กล่องรวม -> รายรับ ต้นทุนอาหาร ค่าส่งรายคัน แล้วรวมเป็นกำไร (ปัดเงินเป็น 2 ตำแหน่ง)
 export function calculateCosts(
   totalBoxes: number,
   jobs: JobCostInput[],
@@ -75,6 +77,7 @@ export function calculateCosts(
   };
 }
 
+// ปัดตัวเลขเงินให้เป็นทศนิยม 2 ตำแหน่ง
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }

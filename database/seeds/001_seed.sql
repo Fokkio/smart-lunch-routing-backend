@@ -1,3 +1,5 @@
+-- ไฟล์นี้: ใส่ค่าตั้งร้านเริ่มต้น setting_id=1 ถ้ามีอยู่แล้วจะไม่ทับค่าของเดิม
+-- รันด้วย: npx tsx scripts/run-sql.ts database/seeds/001_seed.sql
 -- Default singleton settings for Smart Lunch Route.
 -- Uses INSERT IGNORE so an existing production setting_id=1 is never overwritten.
 INSERT IGNORE INTO shop_settings (

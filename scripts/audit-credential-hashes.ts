@@ -1,6 +1,9 @@
+// ไฟล์นี้: ตรวจสอบว่า password_hash ในฐานข้อมูลเป็น bcrypt cost 10 หรือไม่
+// รันด้วย: npx tsx scripts/audit-credential-hashes.ts
 import type { RowDataPacket } from 'mysql2/promise';
 import { closePool, getPool } from '../src/database/mysql.connection';
 
+// count(table): นับ password_hash ในตารางที่ระบุ แยกเป็น bcrypt cost 10 กับแบบอื่น แล้วพิมพ์สรุป
 async function count(table: 'admin_users' | 'riders'): Promise<void> {
   const [rows] = await getPool().query<(RowDataPacket & { total: number; bcrypt10: number; other: number })[]>(
     `SELECT COUNT(password_hash) AS total,
@@ -11,5 +14,6 @@ async function count(table: 'admin_users' | 'riders'): Promise<void> {
   const row = rows[0]!;
   console.log(`${table}: configured=${row.total}, bcrypt_cost_10=${row.bcrypt10}, other=${row.other}`);
 }
+// main(): ตรวจรหัสผ่านที่เก็บไว้ของทั้ง admin_users และ riders
 async function main(): Promise<void> { await count('admin_users'); await count('riders'); }
 main().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(() => closePool());

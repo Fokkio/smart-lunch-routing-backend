@@ -1,3 +1,4 @@
+// ไฟล์นี้: แปลงวันที่จากฐานข้อมูลให้เป็น YYYY-MM-DD เสมอ และหาวันนี้ตามเวลาไทย (Asia/Bangkok)
 /**
  * Shared DATE serialization for model mappers (no DB storage change).
  *
@@ -7,6 +8,7 @@
  * built from local calendar components (never `toISOString`, which can
  * shift the day across timezones for midnight dates).
  */
+// แปลงวันที่จากฐานข้อมูล (string หรือ Date) ให้เป็น YYYY-MM-DD เสมอ
 export function toISODate(value: string | Date): string {
   if (value instanceof Date) {
     return formatLocal(value);
@@ -15,10 +17,12 @@ export function toISODate(value: string | Date): string {
 }
 
 /** Business date is Bangkok, independently of the process timezone. */
+// หาวันนี้ตามเขตเวลา Asia/Bangkok ในรูป YYYY-MM-DD โดยไม่ขึ้นกับ timezone ของเครื่อง
 export function todayLocal(date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
+// แปลง Date ให้เป็น YYYY-MM-DD จากส่วนปี เดือน วันของเครื่องนั้น ๆ
 function formatLocal(value: Date): string {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, '0');

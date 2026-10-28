@@ -1,3 +1,4 @@
+// ไฟล์นี้: SQL ของตารางไรเดอร์ พร้อมสถานะงานปัจจุบันว่าไรเดอร์คนไหนว่าง ไม่ว่าง หรือกำลังส่ง
 import { type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
 import { getPool, withTransaction } from '../database/mysql.connection';
 import { lockPlanning } from './plan-inputs';
@@ -14,16 +15,23 @@ const workloadSql = `SELECT r.*,
  ${busyRiderSql} AS busy,
  EXISTS(SELECT 1 FROM delivery_jobs dj JOIN route_plans rp ON rp.route_plan_id=dj.route_plan_id WHERE dj.rider_id=r.rider_id AND rp.status='SELECTED' AND dj.status='DELIVERING') AS delivering
  FROM riders r`;
+// แปลงแถวไรเดอร์จากฐานข้อมูลให้เป็น object ไรเดอร์ พร้อมสถานะงาน (READY/BUSY/DELIVERING/PAUSED/UNCONFIGURED)
 const map=(r:Row):Rider=>({id:r.rider_id,name:r.rider_name,username:r.username,hasPassword:Boolean(r.password_hash),phone:r.phone,isAvailable:Boolean(r.is_available),
  assignedOrdersToday:Number(r.assigned_orders_today??0),workStatus:r.busy?(r.delivering?'DELIVERING':'BUSY'):!r.username||!r.password_hash||!r.login_enabled?'UNCONFIGURED':!r.is_available||r.status!=='ACTIVE'?'PAUSED':'READY'});
+// คลาส SQL ของตารางไรเดอร์
 export class RiderModel {
+// ดึงไรเดอร์ทั้งหมดพร้อมจำนวนงานวันนี้และสถานะงาน เรียงตาม id
  static async findAll():Promise<Rider[]> {const[r]=await getPool().query<Row[]>(`${workloadSql} ORDER BY r.rider_id`,[todayLocal()]);return r.map(map);}
+// ดึงไรเดอร์คนเดียวตาม id ถ้าไม่เจอคืน null
  static async findById(id:string):Promise<Rider|null>{const[r]=await getPool().execute<Row[]>('SELECT * FROM riders WHERE rider_id=?',[id]);return r[0]?map(r[0]):null;}
+// ดึงไรเดอร์ที่พร้อมรับงาน: ว่าง เปิดใช้งาน ตั้งบัญชีและรหัสผ่านแล้ว และไม่มีงานค้างในแผนที่ยืนยันแล้ว เรียงตามงานน้อยสุดก่อน
  static async findAvailable(planDate=todayLocal()):Promise<Rider[]> {
   const[r]=await getPool().query<Row[]>(`${workloadSql} WHERE is_available=TRUE AND status='ACTIVE' AND login_enabled=TRUE AND username IS NOT NULL AND password_hash IS NOT NULL AND NOT ${busyRiderSql}
    ORDER BY assigned_orders_today,last_assigned_at,r.rider_id`,[planDate]);return r.map(map);
  }
+// เพิ่มไรเดอร์ใหม่ลงฐานข้อมูล แล้วดึงแถวที่สร้างกลับมา
  static async create(i:RiderInput):Promise<Rider>{const[r]=await getPool().execute<ResultSetHeader>('INSERT INTO riders(rider_name,phone,is_available) VALUES(?,?,?)',[i.name,i.phone??null,i.isAvailable??true]);return (await this.findById(String(r.insertId)))!;}
+// แก้ไขไรเดอร์: ล็อกตอนวางแผน แล้วอัปเดตเฉพาะช่องที่ส่งมา (เบอร์ที่ไม่ได้ส่งคงค่าเดิม)
  static async update(id:string,i:Partial<RiderInput>):Promise<Rider|null> {
   await withTransaction(async conn=>{
    await lockPlanning(conn);
@@ -31,6 +39,7 @@ export class RiderModel {
   });
   return this.findById(id);
  }
+// ลบไรเดอร์: ถ้ามีใบงานอ้างอิงอยู่โยน 409 ถ้าไม่มีให้ลบ session ของไรเดอร์คนนี้ด้วยแล้วลบแถว
  static async delete(id:string):Promise<boolean> {
   return withTransaction(async conn=>{
    await lockPlanning(conn);

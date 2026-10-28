@@ -1,3 +1,5 @@
+// ไฟล์นี้: ตรวจ OSRM ของจริงว่าให้ตารางระยะทาง เส้นทาง และ fallback ถูกต้องหรือไม่
+// รันด้วย: npm run verify:live-osrm (ไม่ใช่ส่วนหนึ่งของ npm test)
 /**
  * Live OSRM verification (opt-in, NEVER part of `npm test`).
  *
@@ -34,11 +36,13 @@ const CUSTOMERS: Array<{ id: string; coordinate: Coordinate }> = [
 ];
 
 let failures = 0;
+// check(name, ok, detail): พิมพ์ผล PASS/FAIL ของการตรวจแต่ละข้อ และนับข้อที่ตรวจไม่ผ่าน
 function check(name: string, ok: boolean, detail = ''): void {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
   if (!ok) failures++;
 }
 
+// main(): ตรวจ OSRM จริง 2 ครั้ง (ตารางระยะทางกับเส้นทาง) และตรวจว่า fallback ทำงานเมื่อ OSRM ล่ม
 async function main(): Promise<void> {
   console.log(`OSRM base URL: ${config.osrm.baseUrl} (timeout ${config.osrm.timeoutMs}ms)`);
   // Shop coordinate verified against the repository (not invented here).

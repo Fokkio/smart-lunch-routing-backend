@@ -1,3 +1,6 @@
+// ไฟล์นี้: รันไฟล์ SQL ที่ระบุจาก argument ทีละ statement
+// รันด้วย: npx tsx scripts/run-sql.ts <ไฟล์ .sql> (ใช้ใน npm script db:migrate* ต่าง ๆ)
 import fs from 'node:fs'; import path from 'node:path'; import { getPool, closePool } from '../src/database/mysql.connection'; import { isAlreadyAppliedError } from '../src/database/migration-errors';
 const file=process.argv[2]; if(!file)throw new Error('Usage: tsx scripts/run-sql.ts database/migrations/001_initial_schema.sql');
+// main(): อ่านไฟล์ SQL แล้วรันทีละ statement ข้าม statement ที่รันไปแล้ว แล้วปิดการเชื่อมต่อ
 async function main(){const sql=fs.readFileSync(path.resolve(file),'utf8');for(const statement of sql.split(/;\s*(?:\r?\n|$)/).map(s=>s.trim()).filter(Boolean)){try{await getPool().query(statement)}catch(error){if(!isAlreadyAppliedError(error))throw error;console.log(`Skipping already-applied statement in ${file}`)}}console.log(`Applied ${file}`);await closePool()} main().catch(async e=>{console.error(e.message);await closePool();process.exitCode=1});

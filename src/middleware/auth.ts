@@ -1,3 +1,4 @@
+// ไฟล์นี้: ระบบล็อกอินและสิทธิ์ ได้แก่ hash รหัสผ่าน session token และการกันเจ้าของร้าน/ไรเดอร์
 import { createHash, randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import type { NextFunction, Request, Response } from 'express';
@@ -9,6 +10,7 @@ type LoginRow = RowDataPacket & { id: number; name: string; password_hash: strin
 type SessionRow = RowDataPacket & { actor_type: Identity['type']; actor_id: number; name: string };
 type AttemptRow = RowDataPacket & { failed_count: number; blocked: number; stale: number };
 
+// hash รหัสผ่านด้วย bcrypt cost 10: รหัสต้องยาวอย่างน้อย 12 ตัวอักษรและไม่เกิน 72 ไบต์ UTF-8
 export async function hashPassword(password: string): Promise<string> {
   if (password.length < 12 || Buffer.byteLength(password, 'utf8') > 72) {
     throw Object.assign(new Error('Password must be at least 12 characters and at most 72 UTF-8 bytes'), { statusCode: 400 });
@@ -16,19 +18,23 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
 
+// ตรวจรหัสผ่านกับ hash ที่เก็บไว้: hash ต้องเป็น bcrypt cost 10 ไม่งั้นตอบ false ทันที
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   if (Buffer.byteLength(password, 'utf8') > 72 || !/^\$2[aby]\$10\$/.test(stored)) return false;
   return bcrypt.compare(password, stored);
 }
 
+// hash token ด้วย SHA-256: เก็บเฉพาะ hash ในฐานข้อมูล ไม่เก็บตัว token จริง
 function tokenHash(token: string): string { return createHash('sha256').update(token).digest('hex'); }
 
+// ปรับชื่อผู้ใช้ไรเดอร์ให้เป็นตัวเล็กและตรวจรูปแบบ: ขึ้นต้นด้วยตัวอักษร ยาว 3-40 ตัวอักษร ไม่งั้นคืน null
 export function normalizeRiderUsername(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const username = value.trim().toLowerCase();
   return /^[a-z][a-z0-9._-]{2,39}$/.test(username) ? username : null;
 }
 
+// ล็อกอิน: ลบ session หมดอายุ ตรวจการล็อกชั่วคราวจากล็อกอินผิด ตรวจรหัสผ่าน แล้วสร้าง session 12 ชั่วโมงพร้อม token
 export async function login(type: Identity['type'], username: string, password: string): Promise<{ token: string; user: Identity }> {
   await getPool().query('DELETE FROM auth_sessions WHERE expires_at<UTC_TIMESTAMP()');
   await getPool().query('DELETE FROM auth_login_attempts WHERE window_started_at<DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)');
@@ -73,6 +79,7 @@ export async function login(type: Identity['type'], username: string, password: 
   });
 }
 
+// ด่านตรวจ session: อ่าน Bearer token ตรวจ session ที่ยังไม่หมดอายุ แล้วเก็บตัวตนไว้ใน res.locals
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const header = req.header('Authorization') ?? '';
@@ -94,11 +101,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   } catch (error) { next(error); }
 }
 
+// ด่านกันสิทธิ์เจ้าของร้าน: ถ้าตัวตนไม่ใช่ OWNER ตอบ 403
 export function requireOwner(_req: Request, res: Response, next: NextFunction): void {
   if ((res.locals['identity'] as Identity | undefined)?.type !== 'OWNER') { res.status(403).json({ message: 'Owner access required' }); return; }
   next();
 }
 
+// ด่านกันสิทธิ์ไรเดอร์: ถ้าตัวตนไม่ใช่ RIDER ตอบ 403
 export function requireRider(_req: Request, res: Response, next: NextFunction): void {
   if ((res.locals['identity'] as Identity | undefined)?.type !== 'RIDER') { res.status(403).json({ message: 'Rider access required' }); return; }
   next();

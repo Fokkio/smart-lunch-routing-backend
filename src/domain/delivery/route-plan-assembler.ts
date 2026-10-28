@@ -1,3 +1,4 @@
+// ไฟล์นี้: ประกอบแผนสุดท้ายจากงานที่เรียงแล้ว ตรวจความครบถ้วน เส้นตาย และคิดต้นทุน โดยไม่แตะ I/O
 import type { Coordinate } from '../routing/coordinate';
 import type { GeoJsonLineString, TravelMatrix } from '../routing/distance.types';
 import { round2 } from '../routing/distance-calculator';
@@ -15,8 +16,10 @@ import type {
 } from '../routing/route-plan.types';
 
 /** 422 — the request is well-formed but no feasible plan exists. */
+// error สำหรับแผนที่ทำไม่ได้: สถานะ HTTP 422 ใช้ตอนแผนขาด/ซ้ำออเดอร์ งานเกิน 3 ออเดอร์ หรือจบเกินเส้นตาย
 export class InfeasiblePlanError extends Error {
   readonly statusCode = 422;
+// สร้าง error แผนทำไม่ได้พร้อมชื่อ error และสถานะ 422
   constructor(message: string) {
     super(message);
     this.name = 'InfeasiblePlanError';
@@ -65,6 +68,7 @@ export interface AssembleInput {
  * holds anything but 1–3 orders, or any job finishes after the deadline —
  * such a plan must never be persisted as valid.
  */
+// ประกอบแผนสุดท้าย: ตรวจความครบถ้วน คิดระยะทาง เวลาเดินทาง เวลาถึงแต่ละจุด ตรวจเส้นตาย และคิดต้นทุน -> response ของแผน
 export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
   validateCompleteness(input);
   const startSeconds = timeToSeconds(input.startTime);
@@ -138,6 +142,7 @@ export function assembleRoutePlan(input: AssembleInput): RoutePlanResponse {
   };
 }
 
+// ตรวจแผนก่อนประกอบ: ทุกงานต้องมี 1-3 ออเดอร์ ทุกออเดอร์ต้องปรากฏพอดี 1 ครั้ง ไม่งั้นโยน InfeasiblePlanError
 function validateCompleteness(input: AssembleInput): void {
   const seen = new Map<number, number>();
   for (const job of input.jobs) {
@@ -159,6 +164,7 @@ function validateCompleteness(input: AssembleInput): void {
   }
 }
 
+// รวมระยะทางและเวลาของงานหนึ่งจากตารางระยะทาง: จากร้านผ่านทุกจุดตามลำดับ
 function legTotals(
   matrix: TravelMatrix,
   indexOf: Map<string, number>,
@@ -171,6 +177,7 @@ function legTotals(
   };
 }
 
+// รวมระยะทางของงานหนึ่ง: จากร้านผ่านทุกจุดตามลำดับ โดยเปิดตารางระยะทางทีละขา
 function exactJobDistance(
   matrix: TravelMatrix,
   indexOf: Map<string, number>,
@@ -187,6 +194,7 @@ function exactJobDistance(
   return total;
 }
 
+// รวมเวลาเดินทางของงานหนึ่ง: จากร้านผ่านทุกจุดตามลำดับ โดยเปิดตารางเวลาทีละขา
 function exactJobDuration(
   matrix: TravelMatrix,
   indexOf: Map<string, number>,
@@ -203,6 +211,7 @@ function exactJobDuration(
   return total;
 }
 
+// สร้างรายการจุดส่งของงานหนึ่ง: ลำดับ ระยะทางจากจุดก่อนหน้า เวลาถึงโดยประมาณ และสถานะเริ่มต้น WAITING
 function buildStops(
   input: AssembleInput,
   byId: Map<number, AssembleOrder>,
@@ -244,6 +253,7 @@ function buildStops(
   });
 }
 
+// หาตำแหน่งของจุดในตารางระยะทาง: ถ้าไม่มีจุดนี้โยน InfeasiblePlanError
 function mustHave(indexOf: Map<string, number>, id: string): number {
   const index = indexOf.get(id);
   if (index === undefined) throw new InfeasiblePlanError(`TravelMatrix has no point "${id}"`);
