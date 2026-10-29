@@ -8,6 +8,9 @@ import {
   type OrderStatus,
 } from '../models/order.model';
 import { todayLocal } from '../models/dates';
+import { CustomerModel } from '../models/customer.model';
+import { ShopSettingsModel } from '../models/shop-settings.model';
+import { haversineKmBetween } from '../domain/routing/haversine-distance-calculator';
 import { badInput, validateId, validateObject, validDate } from './input-validation';
 
 const ORDER_STATUSES: OrderStatus[] = ['PENDING', 'PLANNED', 'DELIVERING', 'DELIVERED', 'CANCELLED'];
@@ -52,7 +55,7 @@ export class OrderService {
   }
 
 // สร้างออเดอร์ใหม่: ออเดอร์ใหม่ต้องเป็น PENDING กล่องต้อง 1-3 กล่อง และลูกค้าต้องมีอยู่จริง
-  static create(input: OrderInput): Promise<Order> {
+  static async create(input: OrderInput): Promise<Order> {
     validate(input);
     if (input.status !== undefined && input.status.toUpperCase() !== 'PENDING') badInput('New orders must be PENDING');
     if (!Number.isInteger(input.customerId) || input.customerId < 1) {
@@ -62,6 +65,18 @@ export class OrderService {
       throw Object.assign(new Error('boxes is required and must be an integer between 1 and 3'), {
         statusCode: 400,
       });
+    }
+    // ตรวจระยะร้านถึงลูกค้า: เกิน 3 กิโลเมตร (เส้นตรง) ไม่ให้สร้างออเดอร์ตั้งแต่ต้น
+    const customer = await CustomerModel.findById(String(input.customerId));
+    if (!customer) badInput('Customer does not exist');
+    const shop = await ShopSettingsModel.get();
+    if (
+      haversineKmBetween(
+        { latitude: Number(shop.latitude), longitude: Number(shop.longitude) },
+        { latitude: customer.lat, longitude: customer.lng },
+      ) > 3
+    ) {
+      badInput('ลูกค้าอยู่ห่างจากร้านเกิน 3 กิโลเมตร ไม่สามารถสร้างออเดอร์ได้');
     }
     return OrderModel.create(normalizeStatus(input)).catch(handleOrderWriteError);
   }
