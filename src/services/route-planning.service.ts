@@ -11,6 +11,7 @@ import { finishSeconds, isOnTime, timeToSeconds } from '../domain/delivery/deadl
 import type { Coordinate } from '../domain/routing/coordinate';
 import type { MatrixPoint } from '../domain/routing/distance.types';
 import { sequenceStops, type SequencedRoute } from '../domain/routing/route-sequencer';
+import { haversineKmBetween } from '../domain/routing/haversine-distance-calculator';
 import type { RoutePlanResponse, RoutePlanSummaryResponse } from '../domain/routing/route-plan.types';
 import { fetchTravelMatrixWithFallback, fetchRouteGeometrySafe } from '../infrastructure/routing/fallback-routing';
 import { OsrmClient } from '../infrastructure/routing/osrm.client';
@@ -65,6 +66,16 @@ export class RoutePlanningService {
         latitude: Number(customer.lat), longitude: Number(customer.lng), boxCount: order.boxes,
       };
     });
+
+    // ตรวจระยะร้านถึงลูกค้า: เกิน 3 กิโลเมตร (เส้นตรง) ไม่ให้จัดเส้นทางให้ไรเดอร์ บล็อกทั้งแผน
+    const tooFar = detailed.filter((o) =>
+      haversineKmBetween(shop, { latitude: o.latitude, longitude: o.longitude }) > 3,
+    );
+    if (tooFar.length) {
+      throw new InfeasiblePlanError(
+        `Order ${tooFar.map((o) => o.orderId).join(', ')} is more than 3 km from the shop`,
+      );
+    }
 
     const maxOrders = settings.maxOrdersPerRider;
     const riders = await RiderModel.findAvailable(planDate);
